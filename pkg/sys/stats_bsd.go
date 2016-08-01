@@ -1,4 +1,4 @@
-// +build linux
+// +build !linux,!windows,!darwin
 
 /*
  * Minio Cloud Storage, (C) 2016 Minio, Inc.
@@ -18,17 +18,12 @@
 
 package sys
 
-import "syscall"
+import "errors"
 
-// GetStats - return system statistics.
+// ErrNotImplemented - GetStats() is not implemented on bsds.
+var ErrNotImplemented = errors.New("not implemented")
+
+// GetStats - return system statistics for windows.
 func GetStats() (stats Stats, err error) {
-	si := syscall.Sysinfo_t{}
-	err = syscall.Sysinfo(&si)
-	if err != nil {
-		return
-	}
-	stats = Stats{
-		TotalRAM: si.Totalram,
-	}
-	return stats, nil
+	return Stats{}, ErrNotImplemented
 }
