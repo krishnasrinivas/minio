@@ -30,11 +30,12 @@ const (
 	accessKeyMinLen = 5
 	accessKeyMaxLen = 20
 	secretKeyMinLen = 8
-	secretKeyMaxLen = 100
 
 	alphaNumericTable    = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	alphaNumericTableLen = byte(len(alphaNumericTable))
 )
+
+var secretKeyMaxLen = 40
 
 func mustGetAccessKey() string {
 	keyBytes := make([]byte, accessKeyMaxLen)
