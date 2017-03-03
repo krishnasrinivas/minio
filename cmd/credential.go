@@ -33,9 +33,12 @@ const (
 
 	alphaNumericTable    = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	alphaNumericTableLen = byte(len(alphaNumericTable))
+
+	secretKeyMaxLenAmazon = 40
+	secretKeyMaxLenAzure  = 100
 )
 
-var secretKeyMaxLen = 40
+var secretKeyMaxLen = secretKeyMaxLenAmazon
 
 func mustGetAccessKey() string {
 	keyBytes := make([]byte, accessKeyMaxLen)
