@@ -140,9 +140,9 @@ func newXLObjects(storageDisks []StorageAPI) (ObjectLayer, error) {
 	// Check if object cache is enabled.
 	if xl.objCacheEnabled {
 		// Initialize object cache.
-		objCache, err := objcache.New(maxCacheSize, objcache.DefaultExpiry)
-		if err != nil {
-			return nil, err
+		objCache, cacheErr := objcache.New(maxCacheSize, objcache.DefaultExpiry)
+		if cacheErr != nil {
+			return nil, cacheErr
 		}
 		objCache.OnEviction = func(key string) {
 			debug.FreeOSMemory()
