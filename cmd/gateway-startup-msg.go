@@ -50,7 +50,9 @@ func printGatewayStartupMessage(apiEndPoints []string, accessKey, secretKey stri
 	// authority and expiry.
 	if globalIsSSL {
 		certs, err := readCertificateChain()
-		fatalIf(err, "Unable to read certificate chain.")
+		if err != nil {
+			console.Fatalf("Unable to read certificate chain. Error: %s", err)
+		}
 		printCertificateMsg(certs)
 	}
 }

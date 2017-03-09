@@ -94,7 +94,7 @@ func newGatewayLayer(backendType, accessKey, secretKey string) (GatewayLayer, er
 //
 // DO NOT save this config, this is meant to be
 // only used in memory.
-func newGatewayConfig(accessKey, secretKey, region string) {
+func newGatewayConfig(accessKey, secretKey, region string) error {
 	// Initialize server config.
 	srvCfg := newServerConfigV14()
 
@@ -107,12 +107,19 @@ func newGatewayConfig(accessKey, secretKey, region string) {
 	// Set custom region.
 	srvCfg.SetRegion(region)
 
+	// Create certs path for SSL configuration.
+	if err := createCertsPath(); err != nil {
+		return err
+	}
+
 	// hold the mutex lock before a new config is assigned.
 	// Save the new config globally.
 	// unlock the mutex.
 	serverConfigMu.Lock()
 	serverConfig = srvCfg
 	serverConfigMu.Unlock()
+
+	return nil
 }
 
 // Handler for 'minio gateway'.
@@ -129,7 +136,10 @@ func gatewayMain(ctx *cli.Context) {
 	// TODO: add support for custom region when we add
 	// support for S3 backend storage, currently this can
 	// default to "us-east-1"
-	newGatewayConfig(accessKey, secretKey, "us-east-1")
+	err := newGatewayConfig(accessKey, secretKey, "us-east-1")
+	if err != nil {
+		console.Fatalf("Unable to initialize gateway config. Error: %s", err)
+	}
 
 	// Get quiet flag from command line argument.
 	quietFlag := ctx.Bool("quiet") || ctx.GlobalBool("quiet")
