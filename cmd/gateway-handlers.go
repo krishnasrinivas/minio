@@ -380,3 +380,31 @@ func (api gatewayAPIHandlers) GetBucketPolicyHandler(w http.ResponseWriter, r *h
 	// Write to client.
 	w.Write(policyBytes)
 }
+
+// DeleteBucketHandler - Delete bucket
+func (api objectAPIHandlers) DeleteBucketHandler(w http.ResponseWriter, r *http.Request) {
+	objectAPI := api.ObjectAPI()
+	if objectAPI == nil {
+		writeErrorResponse(w, ErrServerNotInitialized, r.URL)
+		return
+	}
+
+	// DeleteBucket does not have any bucket action.
+	if s3Error := checkRequestAuthType(r, "", "", serverConfig.GetRegion()); s3Error != ErrNone {
+		writeErrorResponse(w, s3Error, r.URL)
+		return
+	}
+
+	vars := mux.Vars(r)
+	bucket := vars["bucket"]
+
+	// Attempt to delete bucket.
+	if err := objectAPI.DeleteBucket(bucket); err != nil {
+		errorIf(err, "Unable to delete a bucket.")
+		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
+		return
+	}
+
+	// Write success response.
+	writeSuccessNoContent(w)
+}
