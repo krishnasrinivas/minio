@@ -86,10 +86,6 @@ func registerGatewayAPIRouter(mux *router.Router, gw GatewayLayer) {
 	bucket.Methods("GET").HandlerFunc(api.GetBucketLocationHandler).Queries("location", "")
 	// GetBucketPolicy
 	bucket.Methods("GET").HandlerFunc(api.GetBucketPolicyHandler).Queries("policy", "")
-	// GetBucketNotification
-	bucket.Methods("GET").HandlerFunc(api.GetBucketNotificationHandler).Queries("notification", "")
-	// ListenBucketNotification
-	bucket.Methods("GET").HandlerFunc(api.ListenBucketNotificationHandler).Queries("events", "{events:.*}")
 	// ListMultipartUploads
 	bucket.Methods("GET").HandlerFunc(api.ListMultipartUploadsHandler).Queries("uploads", "")
 	// ListObjectsV2
@@ -98,8 +94,6 @@ func registerGatewayAPIRouter(mux *router.Router, gw GatewayLayer) {
 	bucket.Methods("GET").HandlerFunc(api.ListObjectsV1Handler)
 	// PutBucketPolicy
 	bucket.Methods("PUT").HandlerFunc(api.PutBucketPolicyHandler).Queries("policy", "")
-	// PutBucketNotification
-	bucket.Methods("PUT").HandlerFunc(api.PutBucketNotificationHandler).Queries("notification", "")
 	// PutBucket
 	bucket.Methods("PUT").HandlerFunc(api.PutBucketHandler)
 	// HeadBucket
