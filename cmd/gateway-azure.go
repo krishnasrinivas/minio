@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -738,7 +739,64 @@ func (a *azureObjects) ListObjectParts(bucket, object, uploadID string, partNumb
 		return result, err
 	}
 
-	// It's decided not to support List Object Parts, hence returning empty result.
+	objBlob := a.client.GetContainerReference(bucket).GetBlobReference(object)
+	resp, err := objBlob.GetBlockList(storage.BlockListTypeUncommitted, nil)
+	if err != nil {
+		return result, azureToObjectError(traceError(err), bucket, object)
+	}
+	partsMap := make(map[string]PartInfo)
+	for _, block := range resp.UncommittedBlocks {
+		var partNumber int
+		var readUploadID string
+		var md5Hex string
+		if partNumber, _, readUploadID, md5Hex, err = azureParseBlockID(block.Name); err != nil {
+			return result, azureToObjectError(traceError(errUnexpected), bucket, object)
+		}
+		partNumberStr := strconv.Itoa(partNumber)
+		if readUploadID != uploadID {
+			continue
+		}
+		part, ok := partsMap[partNumberStr]
+		if !ok {
+			partsMap[partNumberStr] = PartInfo{
+				PartNumber: partNumber,
+				Size:       block.Size,
+				ETag:       md5Hex,
+			}
+			continue
+		}
+		if part.ETag != md5Hex {
+			return result, azureToObjectError(traceError(errUnexpected), bucket, object)
+		}
+		part.Size += block.Size
+		partsMap[partNumberStr] = part
+	}
+	var parts []PartInfo
+	for _, part := range partsMap {
+		parts = append(parts, part)
+	}
+	sort.SliceStable(parts, func(i int, j int) bool {
+		return parts[i].PartNumber < parts[j].PartNumber
+	})
+	partsCount := 0
+	i := 0
+	if partNumberMarker != 0 {
+		for _, part := range parts {
+			i++
+			if part.PartNumber == partNumberMarker {
+				break
+			}
+		}
+	}
+	for partsCount < maxParts && i < len(parts) {
+		result.Parts = append(result.Parts, parts[i])
+		i++
+		partsCount++
+	}
+	if i < len(parts) {
+		result.IsTruncated = true
+		result.PartNumberMarker = result.Parts[partsCount-1].PartNumber
+	}
 	return result, nil
 }
 
