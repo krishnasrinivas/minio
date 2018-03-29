@@ -17,45 +17,42 @@
 package cmd
 
 import (
+	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
-
-	"errors"
 )
 
 // CacheConfig represents cache config settings
 type CacheConfig struct {
-	Drives  []string
-	Expiry  int
-	Exclude []string
+	Drives  []string `json:"drives"`
+	Expiry  int      `json:"expiry"`
+	Exclude []string `json:"exclude"`
 }
 
 // Parses given cacheDrivesEnv and returns a list of cache drives.
 func parseCacheDrives(cacheDrivesEnv string) ([]string, error) {
-	cacheDrivesEnv = strings.ToLower(cacheDrivesEnv)
 	s := strings.Split(cacheDrivesEnv, ";")
-	c2 := make([]string, 0)
 	for _, d := range s {
-		if len(d) > 0 {
-			c2 = append(c2, d)
+		if !filepath.IsAbs(d) {
+			return nil, fmt.Errorf("cache dir should be absolute path: %s", d)
 		}
 	}
-	return c2, nil
+	return s, nil
 }
 
 // Parses given cacheExcludesEnv and returns a list of cache exclude patterns.
 func parseCacheExcludes(cacheExcludesEnv string) ([]string, error) {
 	s := strings.Split(cacheExcludesEnv, ";")
-	c2 := make([]string, 0)
 	for _, e := range s {
-		if len(e) > 0 {
-			if strings.HasPrefix(e, "/") {
-				return c2, errors.New("cache exclude patterns cannot start with / as prefix " + e)
-			}
-			c2 = append(c2, e)
+		if len(e) == 0 {
+			return nil, fmt.Errorf("cache exclude path cannot be empty")
+		}
+		if hasPrefix(e, slashSeparator) {
+			return nil, fmt.Errorf("cache exclude pattern (%s) cannot start with / as prefix ", e)
 		}
 	}
-	return c2, nil
+	return s, nil
 }
 
 // Parses given cacheExpiryEnv and returns cache expiry in days.
