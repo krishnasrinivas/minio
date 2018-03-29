@@ -21,9 +21,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"reflect"
-	"strings"
 
 	errors2 "github.com/minio/minio/pkg/errors"
 )
@@ -124,11 +122,23 @@ func initFormatCache(drives []string) (formats []*formatCacheV1, err error) {
 	nformats := newFormatCacheV1(drives)
 	for _, drive := range drives {
 		if _, err = os.Stat(drive); err != nil {
-			// During init cache, all drives have to be available.
+			if os.IsNotExist(err) {
+				if err = os.Mkdir(drive, 0777); err != nil {
+					return nil, err
+				}
+				continue
+			}
+			// During init cache, all drives should be writable.
 			return nil, err
 		}
 	}
 	for i, drive := range drives {
+		if err = os.Mkdir(pathJoin(drive, minioMetaBucket), 0777); err != nil {
+			// Ignore if '.minio.sys' already exists.
+			if !os.IsExist(err) {
+				return nil, err
+			}
+		}
 		cacheFormatPath := pathJoin(drive, minioMetaBucket, formatConfigFile)
 		// Fresh disk - create format.json for this cfs
 		if err = createFormatCache(cacheFormatPath, nformats[i]); err != nil {
@@ -138,22 +148,22 @@ func initFormatCache(drives []string) (formats []*formatCacheV1, err error) {
 	return nformats, nil
 }
 
-func loadFormatCache(drives []string) []*formatCacheV1 {
+func loadFormatCache(drives []string) ([]*formatCacheV1, error) {
 	formats := make([]*formatCacheV1, len(drives))
 	for i, drive := range drives {
 		cacheFormatPath := pathJoin(drive, minioMetaBucket, formatConfigFile)
 		f, err := os.Open(cacheFormatPath)
 		if err != nil {
-			continue
+			return nil, err
 		}
 		defer f.Close()
 		format, err := formatMetaCacheV1(f)
 		if err != nil {
-			continue
+			return nil, err
 		}
 		formats[i] = format
 	}
-	return formats
+	return formats, nil
 }
 
 // unmarshalls the cache format.json into formatCacheV1
@@ -280,15 +290,7 @@ func validateCacheFormats(formats []*formatCacheV1) error {
 func cacheDrivesUnformatted(drives []string) bool {
 	count := 0
 	for _, drive := range drives {
-		cacheFormatPath := pathJoin(drive, minioMetaBucket, formatConfigFile)
-
-		// Disallow relative paths, figure out absolute paths.
-		cfsPath, err := filepath.Abs(cacheFormatPath)
-		if err != nil {
-			continue
-		}
-
-		if _, err := os.Stat(cfsPath); os.IsNotExist(err) {
+		if _, err := os.Stat(pathJoin(drive, minioMetaBucket, formatConfigFile)); os.IsNotExist(err) {
 			count++
 		}
 	}
@@ -299,27 +301,13 @@ func cacheDrivesUnformatted(drives []string) bool {
 // Then validate the format for all drives in the cache to ensure order
 // of cache drives has not changed.
 func loadAndValidateCacheFormat(drives []string) (formats []*formatCacheV1, err error) {
-	driveDownCount := 0
-	for _, drive := range drives {
-		fi, err := os.Stat(drive)
-		if err != nil {
-			driveDownCount++
-			continue
-		}
-		if !fi.IsDir() {
-			return nil, fmt.Errorf("Cache drive %s is not a directory", drive)
-		}
-	}
-	if driveDownCount == len(drives) {
-		return nil, fmt.Errorf("Cache drives not available: %s", strings.Join(drives, ","))
-	}
 	if cacheDrivesUnformatted(drives) {
 		formats, err = initFormatCache(drives)
-		if err != nil {
-			return nil, err
-		}
 	} else {
-		formats = loadFormatCache(drives)
+		formats, err = loadFormatCache(drives)
+	}
+	if err != nil {
+		return nil, err
 	}
 	if err = validateCacheFormats(formats); err != nil {
 		return nil, err
