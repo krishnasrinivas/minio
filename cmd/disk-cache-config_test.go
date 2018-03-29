@@ -29,7 +29,7 @@ func TestParseCacheExclude(t *testing.T) {
 		success          bool
 	}{
 		// Empty input.
-		{"", []string{}, true},
+		{"", []string{}, false},
 		// valid input
 		{"/home/drive1;/home/drive2;/home/drive3", []string{}, false},
 		{"bucket1/*;*.png;images/trip/barcelona/*", []string{"bucket1/*", "*.png", "images/trip/barcelona/*"}, true},
