@@ -123,18 +123,15 @@ func createFormatCache(fsFormatPath string, format *formatCacheV1) error {
 func initFormatCache(drives []string) (formats []*formatCacheV1, err error) {
 	nformats := newFormatCacheV1(drives)
 	for _, drive := range drives {
-		if _, err := os.Stat(drive); err != nil {
+		if _, err = os.Stat(drive); err != nil {
 			// During init cache, all drives have to be available.
 			return nil, err
 		}
 	}
 	for i, drive := range drives {
-		if err := os.Mkdir(pathJoin(drive, minioMetaBucket), 0777); err != nil {
-			return nil, err
-		}
 		cacheFormatPath := pathJoin(drive, minioMetaBucket, formatConfigFile)
 		// Fresh disk - create format.json for this cfs
-		if err := createFormatCache(cacheFormatPath, nformats[i]); err != nil {
+		if err = createFormatCache(cacheFormatPath, nformats[i]); err != nil {
 			return nil, err
 		}
 	}
@@ -145,13 +142,13 @@ func loadFormatCache(drives []string) []*formatCacheV1 {
 	formats := make([]*formatCacheV1, len(drives))
 	for i, drive := range drives {
 		cacheFormatPath := pathJoin(drive, minioMetaBucket, formatConfigFile)
-		f, perr := os.Open(cacheFormatPath)
-		if perr != nil {
+		f, err := os.Open(cacheFormatPath)
+		if err != nil {
 			continue
 		}
 		defer f.Close()
-		format, perr := formatMetaCacheV1(f)
-		if perr != nil {
+		format, err := formatMetaCacheV1(f)
+		if err != nil {
 			continue
 		}
 		formats[i] = format

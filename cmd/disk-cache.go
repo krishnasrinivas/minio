@@ -789,34 +789,38 @@ func (c cacheObjects) DeleteBucket(ctx context.Context, bucket string) (err erro
 
 // newCache initializes the cacheFSObjects for the "drives" specified in config.json
 // or the global env overrides.
-func newCache(c CacheConfig) (*diskCache, error) {
+func newCache(cc CacheConfig) (*diskCache, error) {
 	var cfsObjects []*cacheFSObjects
-	formats, err := loadAndValidateCacheFormat(c.Drives)
+	formats, err := loadAndValidateCacheFormat(cc.Drives)
 	if err != nil {
 		return nil, err
 	}
-	if len(formats) == 0 {
-		return nil, errors.New("Cache drives validation error")
-	}
-	for i, dir := range c.Drives {
-		// skip cacheFSObjects creation for cache drives missing a format.json
+	for i, dir := range cc.Drives {
+		// Skip cacheFSObjects init for cache drives missing 'format.json'
 		if formats[i] == nil {
 			cfsObjects = append(cfsObjects, nil)
 			continue
 		}
-		c, err := newCacheFSObjects(dir, c.Expiry, cacheMaxDiskUsagePct)
+
+		if err = checkAtimeSupport(dir); err != nil {
+			return nil, errors.New("Atime support required for disk caching")
+		}
+
+		var c *cacheFSObjects
+		c, err = newCacheFSObjects(dir, cc.Expiry, cacheMaxDiskUsagePct)
 		if err != nil {
 			return nil, err
 		}
-		if err := checkAtimeSupport(dir); err != nil {
-			return nil, errors.New("Atime support required for disk caching")
-		}
+
 		// Start the purging go-routine for entries that have expired
 		go c.purge()
+
 		// Start trash purge routine for deleted buckets.
 		go c.purgeTrash()
+
 		cfsObjects = append(cfsObjects, c)
 	}
+
 	return &diskCache{cfs: cfsObjects}, nil
 }
 
@@ -844,16 +848,16 @@ func checkAtimeSupport(dir string) (err error) {
 }
 
 // Returns cacheObjects for use by Server.
-func newServerCacheObjects(c CacheConfig) (CacheObjectLayer, error) {
+func newServerCacheObjects(cc CacheConfig) (CacheObjectLayer, error) {
 	// list of disk caches for cache "drives" specified in config.json or MINIO_CACHE_DRIVES env var.
-	dcache, err := newCache(c)
+	dcache, err := newCache(cc)
 	if err != nil {
 		return nil, err
 	}
 
 	return &cacheObjects{
 		cache:    dcache,
-		exclude:  c.Exclude,
+		exclude:  cc.Exclude,
 		listPool: newTreeWalkPool(globalLookupTimeout),
 		GetObjectFn: func(ctx context.Context, bucket, object string, startOffset int64, length int64, writer io.Writer, etag string) error {
 			return newObjectLayerFn().GetObject(ctx, bucket, object, startOffset, length, writer, etag)
