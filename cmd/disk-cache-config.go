@@ -64,10 +64,10 @@ func parseCacheDrives(drives []string) ([]string, error) {
 func parseCacheExcludes(excludes []string) ([]string, error) {
 	for _, e := range excludes {
 		if len(e) == 0 {
-			return nil, fmt.Errorf("cache exclude path cannot be empty")
+			return nil, fmt.Errorf("cache exclude path (%s) cannot be empty", e)
 		}
 		if hasPrefix(e, slashSeparator) {
-			return nil, fmt.Errorf("cache exclude pattern (%s) cannot start with / as prefix ", e)
+			return nil, fmt.Errorf("cache exclude pattern (%s) cannot start with / as prefix", e)
 		}
 	}
 	return excludes, nil

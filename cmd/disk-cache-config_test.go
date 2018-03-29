@@ -18,8 +18,38 @@ package cmd
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
+
+// Tests cache drive parsing.
+func TestParseCacheDrives(t *testing.T) {
+	testCases := []struct {
+		driveStr         string
+		expectedPatterns []string
+		success          bool
+	}{
+		// valid input
+		{"/home/drive1;/home/drive2;/home/drive3", []string{"/home/drive1", "/home/drive2", "/home/drive3"}, true},
+		{"bucket1/*;*.png;images/trip/barcelona/*", []string{}, false},
+		{"bucket1", []string{}, false},
+	}
+
+	for i, testCase := range testCases {
+		drives, err := parseCacheDrives(strings.Split(testCase.driveStr, cacheEnvDelimiter))
+		if err != nil && testCase.success {
+			t.Errorf("Test %d: Expected success but failed instead %s", i+1, err)
+		}
+		if err == nil && !testCase.success {
+			t.Errorf("Test %d: Expected failure but passed instead", i+1)
+		}
+		if err == nil {
+			if !reflect.DeepEqual(drives, testCase.expectedPatterns) {
+				t.Errorf("Test %d: Expected %v, got %v", i+1, testCase.expectedPatterns, drives)
+			}
+		}
+	}
+}
 
 // Tests cache exclude parsing.
 func TestParseCacheExclude(t *testing.T) {
@@ -28,8 +58,6 @@ func TestParseCacheExclude(t *testing.T) {
 		expectedPatterns []string
 		success          bool
 	}{
-		// Empty input.
-		{"", []string{}, false},
 		// valid input
 		{"/home/drive1;/home/drive2;/home/drive3", []string{}, false},
 		{"bucket1/*;*.png;images/trip/barcelona/*", []string{"bucket1/*", "*.png", "images/trip/barcelona/*"}, true},
@@ -37,15 +65,17 @@ func TestParseCacheExclude(t *testing.T) {
 	}
 
 	for i, testCase := range testCases {
-		excludes, err := parseCacheExcludes(testCase.excludeStr)
+		excludes, err := parseCacheExcludes(strings.Split(testCase.excludeStr, cacheEnvDelimiter))
 		if err != nil && testCase.success {
 			t.Errorf("Test %d: Expected success but failed instead %s", i+1, err)
 		}
 		if err == nil && !testCase.success {
 			t.Errorf("Test %d: Expected failure but passed instead", i+1)
 		}
-		if !reflect.DeepEqual(excludes, testCase.expectedPatterns) {
-			t.Errorf("Expected %v, got %v", testCase.expectedPatterns, excludes)
+		if err == nil {
+			if !reflect.DeepEqual(excludes, testCase.expectedPatterns) {
+				t.Errorf("Test %d: Expected %v, got %v", i+1, testCase.expectedPatterns, excludes)
+			}
 		}
 	}
 }
