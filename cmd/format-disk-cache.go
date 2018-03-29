@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"reflect"
 
 	errors2 "github.com/minio/minio/pkg/errors"
@@ -134,8 +133,10 @@ func initFormatCache(drives []string) (formats []*formatCacheV1, err error) {
 		}
 	}
 	for i, drive := range drives {
-		if err := os.Mkdir(pathJoin(drive, minioMetaBucket), 0777); err != nil {
-			return nil, err
+		if err = os.Mkdir(pathJoin(drive, minioMetaBucket), 0777); err != nil {
+			if !os.IsExist(err) {
+				return nil, err
+			}
 		}
 		cacheFormatPath := pathJoin(drive, minioMetaBucket, formatConfigFile)
 		// Fresh disk - create format.json for this cfs
@@ -146,13 +147,16 @@ func initFormatCache(drives []string) (formats []*formatCacheV1, err error) {
 	return nformats, nil
 }
 
-func loadFormatCache(drives []string) []*formatCacheV1 {
+func loadFormatCache(drives []string) ([]*formatCacheV1, error) {
 	formats := make([]*formatCacheV1, len(drives))
 	for i, drive := range drives {
 		cacheFormatPath := pathJoin(drive, minioMetaBucket, formatConfigFile)
 		f, err := os.Open(cacheFormatPath)
 		if err != nil {
-			continue
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, err
 		}
 		defer f.Close()
 		format, err := formatMetaCacheV1(f)
@@ -161,7 +165,7 @@ func loadFormatCache(drives []string) []*formatCacheV1 {
 		}
 		formats[i] = format
 	}
-	return formats
+	return formats, nil
 }
 
 // unmarshalls the cache format.json into formatCacheV1
@@ -300,18 +304,13 @@ func cacheDrivesUnformatted(drives []string) bool {
 // Then validate the format for all drives in the cache to ensure order
 // of cache drives has not changed.
 func loadAndValidateCacheFormat(drives []string) (formats []*formatCacheV1, err error) {
-	for _, drive := range drives {
-		if !filepath.IsAbs(drive) {
-			return nil, fmt.Errorf("cache dir %s should be absoute path", drive)
-		}
-	}
 	if cacheDrivesUnformatted(drives) {
 		formats, err = initFormatCache(drives)
-		if err != nil {
-			return nil, err
-		}
 	} else {
-		formats = loadFormatCache(drives)
+		formats, err = loadFormatCache(drives)
+	}
+	if err != nil {
+		return nil, err
 	}
 	if err = validateCacheFormats(formats); err != nil {
 		return nil, err

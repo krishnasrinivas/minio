@@ -17,10 +17,9 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"strconv"
-	"strings"
 )
 
 // CacheConfig represents cache config settings
@@ -30,21 +29,40 @@ type CacheConfig struct {
 	Exclude []string `json:"exclude"`
 }
 
+// UnmarshalJSON - implements JSON unmarshal interface for unmarshalling
+// json entries for CacheConfig.
+func (cfg *CacheConfig) UnmarshalJSON(data []byte) (err error) {
+	type Alias CacheConfig
+	var _cfg = &struct {
+		*Alias
+	}{
+		Alias: (*Alias)(cfg),
+	}
+	if err = json.Unmarshal(data, _cfg); err != nil {
+		return err
+	}
+	if _, err = parseCacheDrives(_cfg.Drives); err != nil {
+		return err
+	}
+	if _, err = parseCacheExcludes(_cfg.Exclude); err != nil {
+		return err
+	}
+	return nil
+}
+
 // Parses given cacheDrivesEnv and returns a list of cache drives.
-func parseCacheDrives(cacheDrivesEnv string) ([]string, error) {
-	s := strings.Split(cacheDrivesEnv, ";")
-	for _, d := range s {
+func parseCacheDrives(drives []string) ([]string, error) {
+	for _, d := range drives {
 		if !filepath.IsAbs(d) {
 			return nil, fmt.Errorf("cache dir should be absolute path: %s", d)
 		}
 	}
-	return s, nil
+	return drives, nil
 }
 
 // Parses given cacheExcludesEnv and returns a list of cache exclude patterns.
-func parseCacheExcludes(cacheExcludesEnv string) ([]string, error) {
-	s := strings.Split(cacheExcludesEnv, ";")
-	for _, e := range s {
+func parseCacheExcludes(excludes []string) ([]string, error) {
+	for _, e := range excludes {
 		if len(e) == 0 {
 			return nil, fmt.Errorf("cache exclude path cannot be empty")
 		}
@@ -52,10 +70,5 @@ func parseCacheExcludes(cacheExcludesEnv string) ([]string, error) {
 			return nil, fmt.Errorf("cache exclude pattern (%s) cannot start with / as prefix ", e)
 		}
 	}
-	return s, nil
-}
-
-// Parses given cacheExpiryEnv and returns cache expiry in days.
-func parseCacheExpiry(cacheExpiryEnv string) (int, error) {
-	return strconv.Atoi(cacheExpiryEnv)
+	return excludes, nil
 }

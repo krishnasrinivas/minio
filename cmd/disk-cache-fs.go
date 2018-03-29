@@ -38,6 +38,8 @@ const (
 	// cache.json object metadata for cached objects.
 	cacheMetaJSONFile = "cache.json"
 	cacheMetaFormat   = "cache"
+
+	cacheEnvDelimiter = ";"
 )
 
 // cacheFSObjects implements the cache backend operations.
