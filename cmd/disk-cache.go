@@ -18,15 +18,12 @@ package cmd
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
-	"hash/crc32"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
-	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -115,7 +112,6 @@ func backendDownError(err error) bool {
 // until an online drive is found.If object is not found, fall back to the first online cache drive
 // closest to the hash index, so that object can be recached.
 func (c diskCache) getCachedFSLoc(ctx context.Context, bucket, object string) (*cacheFSObjects, error) {
-
 	index := c.hashIndex(bucket, object)
 	numDisks := len(c.cfs)
 	// save first online cache disk closest to the hint index
@@ -145,7 +141,6 @@ func (c diskCache) getCachedFSLoc(ctx context.Context, bucket, object string) (*
 // a hint. In the event that the cache drive at hash index is offline, treat the list of cache drives
 // as a circular buffer and walk through them starting at hash index until an online drive is found.
 func (c diskCache) getCacheFS(ctx context.Context, bucket, object string) (*cacheFSObjects, error) {
-
 	index := c.hashIndex(bucket, object)
 	numDisks := len(c.cfs)
 	for k := 0; k < numDisks; k++ {
@@ -162,8 +157,7 @@ func (c diskCache) getCacheFS(ctx context.Context, bucket, object string) (*cach
 
 // Compute a unique hash sum for bucket and object
 func (c diskCache) hashIndex(bucket, object string) int {
-	key := fmt.Sprintf("%x", sha256.Sum256([]byte(path.Join(bucket, object))))
-	return int(crc32.Checksum([]byte(key), crc32.IEEETable)) % len(c.cfs)
+	return crcHashMod(pathJoin(bucket, object), len(c.cfs))
 }
 
 // construct a metadata k-v map
@@ -496,7 +490,6 @@ func (c cacheObjects) listBuckets(ctx context.Context) (buckets []BucketInfo, er
 // Returns list of buckets from cache or the backend. If the backend is down, buckets
 // available on cache are served.
 func (c cacheObjects) ListBuckets(ctx context.Context) (buckets []BucketInfo, err error) {
-
 	listBucketsFn := c.ListBucketsFn
 	buckets, err = listBucketsFn(ctx)
 	if err != nil {
@@ -510,7 +503,6 @@ func (c cacheObjects) ListBuckets(ctx context.Context) (buckets []BucketInfo, er
 
 // Returns bucket info from cache if backend is down.
 func (c cacheObjects) GetBucketInfo(ctx context.Context, bucket string) (bucketInfo BucketInfo, err error) {
-
 	getBucketInfoFn := c.GetBucketInfoFn
 	bucketInfo, err = getBucketInfoFn(ctx, bucket)
 	if backendDownError(err) {
@@ -525,7 +517,6 @@ func (c cacheObjects) GetBucketInfo(ctx context.Context, bucket string) (bucketI
 
 // Delete Object deletes from cache as well if backend operation succeeds
 func (c cacheObjects) DeleteObject(ctx context.Context, bucket, object string) (err error) {
-
 	if err = c.DeleteObjectFn(ctx, bucket, object); err != nil {
 		return
 	}
@@ -619,7 +610,6 @@ func (c cacheObjects) PutObject(ctx context.Context, bucket, object string, r *h
 
 // NewMultipartUpload - Starts a new multipart upload operation to backend and cache.
 func (c cacheObjects) NewMultipartUpload(ctx context.Context, bucket, object string, metadata map[string]string) (uploadID string, err error) {
-
 	newMultipartUploadFn := c.NewMultipartUploadFn
 
 	if c.isCacheExclude(bucket, object) || filterFromCache(metadata) {
@@ -643,7 +633,6 @@ func (c cacheObjects) NewMultipartUpload(ctx context.Context, bucket, object str
 
 // PutObjectPart - uploads part to backend and cache simultaneously.
 func (c cacheObjects) PutObjectPart(ctx context.Context, bucket, object, uploadID string, partID int, data *hash.Reader) (info PartInfo, err error) {
-
 	putObjectPartFn := c.PutObjectPartFn
 	dcache, err := c.cache.getCacheFS(ctx, bucket, object)
 	if err != nil {
@@ -713,7 +702,6 @@ func (c cacheObjects) PutObjectPart(ctx context.Context, bucket, object, uploadI
 
 // AbortMultipartUpload - aborts multipart upload on backend and cache.
 func (c cacheObjects) AbortMultipartUpload(ctx context.Context, bucket, object, uploadID string) error {
-
 	abortMultipartUploadFn := c.AbortMultipartUploadFn
 
 	if c.isCacheExclude(bucket, object) {
@@ -737,7 +725,6 @@ func (c cacheObjects) AbortMultipartUpload(ctx context.Context, bucket, object, 
 
 // CompleteMultipartUpload - completes multipart upload operation on backend and cache.
 func (c cacheObjects) CompleteMultipartUpload(ctx context.Context, bucket, object, uploadID string, uploadedParts []CompletePart) (objInfo ObjectInfo, err error) {
-
 	completeMultipartUploadFn := c.CompleteMultipartUploadFn
 
 	if c.isCacheExclude(bucket, object) {
@@ -806,7 +793,7 @@ func newCache(c CacheConfig) (*diskCache, error) {
 	var cfsObjects []*cacheFSObjects
 	formats, err := loadAndValidateCacheFormat(c.Drives)
 	if err != nil {
-		errorIf(err, "Cache drives validation error")
+		return nil, err
 	}
 	if len(formats) == 0 {
 		return nil, errors.New("Cache drives validation error")
@@ -858,7 +845,6 @@ func checkAtimeSupport(dir string) (err error) {
 
 // Returns cacheObjects for use by Server.
 func newServerCacheObjects(c CacheConfig) (CacheObjectLayer, error) {
-
 	// list of disk caches for cache "drives" specified in config.json or MINIO_CACHE_DRIVES env var.
 	dcache, err := newCache(c)
 	if err != nil {
