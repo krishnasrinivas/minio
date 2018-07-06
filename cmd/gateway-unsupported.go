@@ -18,6 +18,7 @@ package cmd
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"github.com/minio/minio/cmd/logger"
@@ -28,6 +29,50 @@ import (
 
 // GatewayUnsupported list of unsupported call stubs for gateway.
 type GatewayUnsupported struct{}
+
+func (a GatewayUnsupported) DeleteBucket(ctx context.Context, bucket string) error {
+	return NotImplemented{}
+}
+
+func (a GatewayUnsupported) DeleteObject(ctx context.Context, bucket, object string) error {
+	return NotImplemented{}
+}
+
+func (a GatewayUnsupported) GetBucketInfo(ctx context.Context, bucket string) (bucketInfo BucketInfo, err error) {
+	return bucketInfo, NotImplemented{}
+}
+
+func (a GatewayUnsupported) GetObject(ctx context.Context, bucket, object string, startOffset int64, length int64, writer io.Writer, etag string) (err error) {
+	return NotImplemented{}
+}
+
+func (a GatewayUnsupported) GetObjectInfo(ctx context.Context, bucket, object string) (objInfo ObjectInfo, err error) {
+	return objInfo, NotImplemented{}
+}
+
+func (a GatewayUnsupported) ListBuckets(ctx context.Context) (buckets []BucketInfo, err error) {
+	return nil, NotImplemented{}
+}
+
+func (a GatewayUnsupported) ListObjects(ctx context.Context, bucket, prefix, marker, delimiter string, maxKeys int) (result ListObjectsInfo, err error) {
+	return result, NotImplemented{}
+}
+
+func (a GatewayUnsupported) MakeBucketWithLocation(ctx context.Context, bucket string, location string) error {
+	return NotImplemented{}
+}
+
+func (a GatewayUnsupported) PutObject(ctx context.Context, bucket, object string, data *hash.Reader, metadata map[string]string) (objInfo ObjectInfo, err error) {
+	return objInfo, NotImplemented{}
+}
+
+func (a GatewayUnsupported) Shutdown(context.Context) error {
+	return NotImplemented{}
+}
+
+func (a GatewayUnsupported) StorageInfo(context.Context) StorageInfo {
+	return StorageInfo{}
+}
 
 // ListMultipartUploads lists all multipart uploads.
 func (a GatewayUnsupported) ListMultipartUploads(ctx context.Context, bucket string, prefix string, keyMarker string, uploadIDMarker string, delimiter string, maxUploads int) (lmi ListMultipartsInfo, err error) {

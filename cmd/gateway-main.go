@@ -40,8 +40,8 @@ func init() {
 
 var (
 	gatewayCmd = cli.Command{
-		Name:            "gateway",
-		Usage:           "Start object storage gateway.",
+		Name:            "server",
+		Usage:           "Start object storage.",
 		Flags:           append(serverFlags, globalFlags...),
 		HideHelpCommand: true,
 	}
