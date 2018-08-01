@@ -23,6 +23,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"reflect"
@@ -42,15 +43,15 @@ type Client struct {
 }
 
 // Call - calls service method on RPC server.
-func (client *Client) Call(serviceMethod string, args, reply interface{}) error {
+func (client *Client) Call(serviceMethod string, args interface{}, reader io.Reader, reply interface{}) (io.ReadCloser, error) {
 	replyKind := reflect.TypeOf(reply).Kind()
 	if replyKind != reflect.Ptr {
-		return fmt.Errorf("rpc reply must be a pointer type, but found %v", replyKind)
+		return nil, fmt.Errorf("rpc reply must be a pointer type, but found %v", replyKind)
 	}
 
 	data, err := gobEncode(args)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	callRequest := CallRequest{
@@ -60,29 +61,36 @@ func (client *Client) Call(serviceMethod string, args, reply interface{}) error 
 
 	var buf bytes.Buffer
 	if err = gob.NewEncoder(&buf).Encode(callRequest); err != nil {
-		return err
+		return nil, err
 	}
 
-	response, err := client.httpClient.Post(client.serviceURL.String(), "", &buf)
-	if err != nil {
-		return err
+	var body io.Reader = &buf
+	if reader != nil {
+		body = io.MultiReader(body, reader)
 	}
-	defer response.Body.Close()
+
+	response, err := client.httpClient.Post(client.serviceURL.String(), "", body)
+	if err != nil {
+		return nil, err
+	}
 
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("%v rpc call failed with error code %v", serviceMethod, response.StatusCode)
+		response.Body.Close()
+		return nil, fmt.Errorf("%v rpc call failed with error code %v", serviceMethod, response.StatusCode)
 	}
 
 	var callResponse CallResponse
-	if err := gob.NewDecoder(response.Body).Decode(&callResponse); err != nil {
-		return err
+	if err := gob.NewDecoder(newGobReader(response.Body)).Decode(&callResponse); err != nil {
+		response.Body.Close()
+		return nil, err
 	}
 
 	if callResponse.Error != "" {
-		return errors.New(callResponse.Error)
+		response.Body.Close()
+		return nil, errors.New(callResponse.Error)
 	}
 
-	return gobDecode(callResponse.ReplyBytes, reply)
+	return response.Body, gobDecode(callResponse.ReplyBytes, reply)
 }
 
 // Close - does nothing and presents for interface compatibility.
