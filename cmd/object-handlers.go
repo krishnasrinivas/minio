@@ -63,6 +63,31 @@ func setHeadGetRespHeaders(w http.ResponseWriter, reqParams url.Values) {
 	}
 }
 
+// This takes care of writing getObject headers on the first Write()
+type getObjectWriteHeader struct {
+	objInfo        ObjectInfo
+	hrange         *httpRange
+	responseWriter http.ResponseWriter
+	writer         io.Writer
+	request        *http.Request
+	headersWritten bool
+}
+
+// Write the headers.
+func (g *getObjectWriteHeader) writeHeaders() {
+	setObjectHeaders(g.responseWriter, g.objInfo, g.hrange)
+	setHeadGetRespHeaders(g.responseWriter, g.request.URL.Query())
+}
+
+// Write data. The first write call will also write the headers.
+func (g *getObjectWriteHeader) Write(p []byte) (int, error) {
+	if !g.headersWritten {
+		g.writeHeaders()
+		g.headersWritten = true
+	}
+	return g.writer.Write(p)
+}
+
 // GetObjectHandler - GET Object
 // ----------
 // This implementation of the GET operation retrieves object. To use GET,
@@ -171,36 +196,24 @@ func (api objectAPIHandlers) GetObjectHandler(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	setObjectHeaders(w, objInfo, hrange)
-	setHeadGetRespHeaders(w, r.URL.Query())
-
 	getObject := objectAPI.GetObject
 	if api.CacheAPI() != nil && !hasSSECustomerHeader(r.Header) {
 		getObject = api.CacheAPI().GetObject
 	}
 
-	statusCodeWritten := false
-	httpWriter := ioutil.WriteOnClose(writer)
-
-	if hrange != nil && hrange.offsetBegin > -1 {
-		statusCodeWritten = true
-		w.WriteHeader(http.StatusPartialContent)
-	}
+	httpWriter := &getObjectWriteHeader{objInfo, hrange, w, writer, r, false}
 
 	// Reads the object at startOffset and writes to mw.
 	if err = getObject(ctx, bucket, object, startOffset, length, httpWriter, objInfo.ETag); err != nil {
-		if !httpWriter.HasWritten() && !statusCodeWritten { // write error response only if no data or headers has been written to client yet
+		if !httpWriter.headersWritten { // write error response only if no data or headers has been written to client yet
 			writeErrorResponse(w, toAPIErrorCode(err), r.URL)
 		}
-		httpWriter.Close()
 		return
 	}
 
-	if err = httpWriter.Close(); err != nil {
-		if !httpWriter.HasWritten() && !statusCodeWritten { // write error response only if no data or headers has been written to client yet
-			writeErrorResponse(w, toAPIErrorCode(err), r.URL)
-			return
-		}
+	// If it was an empty file we ensure that we write response headers.
+	if !httpWriter.headersWritten {
+		httpWriter.writeHeaders()
 	}
 
 	// Get host and port from Request.RemoteAddr.
