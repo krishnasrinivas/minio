@@ -57,10 +57,14 @@ type cacheObjects struct {
 	// file path patterns to exclude from cache
 	exclude []string
 	// Object functions pointing to the corresponding functions of backend implementation.
-	GetObjectFn               func(ctx context.Context, bucket, object string, startOffset int64, length int64, writer io.Writer, etag string) (err error)
-	GetObjectInfoFn           func(ctx context.Context, bucket, object string) (objInfo ObjectInfo, err error)
+	GetObjectFn            func(ctx context.Context, bucket, object string, startOffset int64, length int64, writer io.Writer, etag string) (err error)
+	GetObjectInfoFn        func(ctx context.Context, bucket, object string) (objInfo ObjectInfo, err error)
+	GetObjectVersionFn     func(ctx context.Context, bucket, object, version string, startOffset int64, length int64, writer io.Writer, etag string) (err error)
+	GetObjectInfoVersionFn func(ctx context.Context, bucket, object, version string) (objInfo ObjectInfo, deleteMarker bool, err error)
+
 	PutObjectFn               func(ctx context.Context, bucket, object string, data *hash.Reader, metadata map[string]string) (objInfo ObjectInfo, err error)
-	DeleteObjectFn            func(ctx context.Context, bucket, object string) error
+	DeleteObjectFn            func(ctx context.Context, bucket, object string) (versionId string, err error)
+	DeleteObjectVersionFn     func(ctx context.Context, bucket, object, version string) (deleteMarker bool, err error)
 	ListObjectsFn             func(ctx context.Context, bucket, prefix, marker, delimiter string, maxKeys int) (result ListObjectsInfo, err error)
 	ListObjectsV2Fn           func(ctx context.Context, bucket, prefix, continuationToken, delimiter string, maxKeys int, fetchOwner bool, startAfter string) (result ListObjectsV2Info, err error)
 	ListBucketsFn             func(ctx context.Context) (buckets []BucketInfo, err error)
@@ -90,8 +94,13 @@ type CacheObjectLayer interface {
 	// Object operations.
 	GetObject(ctx context.Context, bucket, object string, startOffset int64, length int64, writer io.Writer, etag string) (err error)
 	GetObjectInfo(ctx context.Context, bucket, object string) (objInfo ObjectInfo, err error)
+
+	GetObjectVersion(ctx context.Context, bucket, object, version string, startOffset int64, length int64, writer io.Writer, etag string) (err error)
+	GetObjectInfoVersion(ctx context.Context, bucket, object, version string) (objInfo ObjectInfo, deleteMarker bool, err error)
+
 	PutObject(ctx context.Context, bucket, object string, data *hash.Reader, metadata map[string]string) (objInfo ObjectInfo, err error)
-	DeleteObject(ctx context.Context, bucket, object string) error
+	DeleteObject(ctx context.Context, bucket, object string) (versionId string, err error)
+	DeleteObjectVersion(ctx context.Context, bucket, object, version string) (deleteMarker bool, err error)
 
 	// Multipart operations.
 	NewMultipartUpload(ctx context.Context, bucket, object string, metadata map[string]string) (uploadID string, err error)
@@ -244,6 +253,10 @@ func (c cacheObjects) GetObject(ctx context.Context, bucket, object string, star
 	return
 }
 
+func (c cacheObjects) GetObjectVersion(ctx context.Context, bucket, object, version string, startOffset int64, length int64, writer io.Writer, etag string) (err error) {
+	return NotImplemented{}
+}
+
 // Returns ObjectInfo from cache if available.
 func (c cacheObjects) GetObjectInfo(ctx context.Context, bucket, object string) (ObjectInfo, error) {
 	getObjectInfoFn := c.GetObjectInfoFn
@@ -282,6 +295,10 @@ func (c cacheObjects) GetObjectInfo(ctx context.Context, bucket, object string) 
 		dcache.Delete(ctx, bucket, object)
 	}
 	return objInfo, nil
+}
+
+func (c cacheObjects) GetObjectInfoVersion(ctx context.Context, bucket, object, version string) (ObjectInfo, bool, error) {
+	return ObjectInfo{}, false, NotImplemented{}
 }
 
 // Returns function "listDir" of the type listDirFunc.
@@ -339,7 +356,7 @@ func (c cacheObjects) listCacheObjects(ctx context.Context, bucket, prefix, mark
 	if delimiter == slashSeparator {
 		recursive = false
 	}
-	walkResultCh, endWalkCh := c.listPool.Release(listParams{bucket, recursive, marker, prefix, false})
+	walkResultCh, endWalkCh := c.listPool.Release(listParams{bucket, recursive, marker, prefix, false, ""})
 	if walkResultCh == nil {
 		endWalkCh = make(chan struct{})
 		isLeaf := func(bucket, object string) bool {
@@ -411,7 +428,7 @@ func (c cacheObjects) listCacheObjects(ctx context.Context, bucket, prefix, mark
 		}
 	}
 
-	params := listParams{bucket, recursive, nextMarker, prefix, false}
+	params := listParams{bucket, recursive, nextMarker, prefix, false, ""}
 	if !eof {
 		c.listPool.Set(params, walkResultCh, endWalkCh)
 	}
@@ -533,9 +550,9 @@ func (c cacheObjects) GetBucketInfo(ctx context.Context, bucket string) (bucketI
 	return
 }
 
-// Delete Object deletes from cache as well if backend operation succeeds
-func (c cacheObjects) DeleteObject(ctx context.Context, bucket, object string) (err error) {
-	if err = c.DeleteObjectFn(ctx, bucket, object); err != nil {
+// DeleteObject deletes from cache as well if backend operation succeeds
+func (c cacheObjects) DeleteObject(ctx context.Context, bucket, object string) (versionId string, err error) {
+	if versionId, err = c.DeleteObjectFn(ctx, bucket, object); err != nil {
 		return
 	}
 	if c.isCacheExclude(bucket, object) {
@@ -543,9 +560,14 @@ func (c cacheObjects) DeleteObject(ctx context.Context, bucket, object string) (
 	}
 	dcache, cerr := c.cache.getCachedFSLoc(ctx, bucket, object)
 	if cerr == nil {
-		_ = dcache.DeleteObject(ctx, bucket, object)
+		dcache.DeleteObject(ctx, bucket, object)
 	}
 	return
+}
+
+// DeleteObjectVersion - not implemented for caching
+func (c cacheObjects) DeleteObjectVersion(ctx context.Context, bucket, object, version string) (deleteMarker bool, err error) {
+	return false, NotImplemented{}
 }
 
 // Returns true if object should be excluded from cache
@@ -885,8 +907,11 @@ func newServerCacheObjects(config CacheConfig) (CacheObjectLayer, error) {
 		PutObjectFn: func(ctx context.Context, bucket, object string, data *hash.Reader, metadata map[string]string) (objInfo ObjectInfo, err error) {
 			return newObjectLayerFn().PutObject(ctx, bucket, object, data, metadata)
 		},
-		DeleteObjectFn: func(ctx context.Context, bucket, object string) error {
+		DeleteObjectFn: func(ctx context.Context, bucket, object string) (versionId string, err error) {
 			return newObjectLayerFn().DeleteObject(ctx, bucket, object)
+		},
+		DeleteObjectVersionFn: func(ctx context.Context, bucket, object, version string) (deleteMarker bool, err error) {
+			return newObjectLayerFn().DeleteObjectVersion(ctx, bucket, object, version)
 		},
 		ListObjectsFn: func(ctx context.Context, bucket, prefix, marker, delimiter string, maxKeys int) (result ListObjectsInfo, err error) {
 			return newObjectLayerFn().ListObjects(ctx, bucket, prefix, marker, delimiter, maxKeys)

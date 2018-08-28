@@ -48,6 +48,20 @@ type DeleteBucketArgs struct {
 func (receiver *peerRPCReceiver) DeleteBucket(args *DeleteBucketArgs, reply *VoidReply) error {
 	globalNotificationSys.RemoveNotification(args.BucketName)
 	globalPolicySys.Remove(args.BucketName)
+	globalVersioningSys.Remove(args.BucketName)
+	return nil
+}
+
+// SetBucketVersioningArgs - set bucket versioning RPC arguments.
+type SetBucketVersioningArgs struct {
+	AuthArgs
+	BucketName string
+	Versioning VersioningConfiguration
+}
+
+// SetBucketVersioning - handles set bucket versioning RPC call which sets global versioning status for the bucket
+func (receiver *peerRPCReceiver) SetBucketVersioning(args *SetBucketVersioningArgs, reply *VoidReply) error {
+	globalVersioningSys.Set(args.BucketName, args.Versioning)
 	return nil
 }
 

@@ -28,6 +28,15 @@ const (
 // ObjectIdentifier carries key name for the object to delete.
 type ObjectIdentifier struct {
 	ObjectName string `xml:"Key"`
+	VersionId  string `xml:"VersionId,omitempty"`
+}
+
+// ObjectIdentifierDeleted carries information for the object that is deleted.
+type ObjectIdentifierDeleted struct {
+	ObjectName            string `xml:"Key"`
+	VersionId             string `xml:"VersionId,omitempty"`
+	DeleteMarker          bool   `xml:"DeleteMarker,omitempty"`
+	DeleteMarkerVersionId string `xml:"DeleteMarkerVersionId,omitempty"`
 }
 
 // createBucketConfiguration container for bucket configuration request from client.

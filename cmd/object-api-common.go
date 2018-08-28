@@ -92,6 +92,9 @@ func deleteBucketMetadata(ctx context.Context, bucket string, objAPI ObjectLayer
 
 	// Delete listener config, if present - ignore any errors.
 	removeListenerConfig(ctx, objAPI, bucket)
+
+	// Delete bucket versioning info, if present - ignore any errors.
+	removeVersioningConfig(ctx, objAPI, bucket)
 }
 
 // Depending on the disk type network or local, initialize storage API.
@@ -152,12 +155,14 @@ func removeNotificationConfig(ctx context.Context, objAPI ObjectLayer, bucket st
 	}
 
 	ncPath := path.Join(bucketConfigPrefix, bucket, bucketNotificationConfig)
-	return objAPI.DeleteObject(ctx, minioMetaBucket, ncPath)
+	_, err := objAPI.DeleteObject(ctx, minioMetaBucket, ncPath)
+	return err
 }
 
 // Remove listener configuration from storage layer. Used when a bucket is deleted.
 func removeListenerConfig(ctx context.Context, objAPI ObjectLayer, bucket string) error {
 	// make the path
 	lcPath := path.Join(bucketConfigPrefix, bucket, bucketListenerConfig)
-	return objAPI.DeleteObject(ctx, minioMetaBucket, lcPath)
+	_, err := objAPI.DeleteObject(ctx, minioMetaBucket, lcPath)
+	return err
 }

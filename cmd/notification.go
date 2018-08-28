@@ -148,6 +148,24 @@ func (sys *NotificationSys) RemoveBucketPolicy(ctx context.Context, bucketName s
 	}()
 }
 
+// SetBucketVersioning - calls SetBucketVersioning RPC call on all peers.
+func (sys *NotificationSys) SetBucketVersioning(ctx context.Context, bucketName string, versioning VersioningConfiguration) {
+	go func() {
+		var wg sync.WaitGroup
+		for addr, client := range sys.peerRPCClientMap {
+			wg.Add(1)
+			go func(addr xnet.Host, client *PeerRPCClient) {
+				defer wg.Done()
+				if err := client.SetBucketVersioning(bucketName, versioning); err != nil {
+					logger.GetReqInfo(ctx).AppendTags("remotePeer", addr.Name)
+					logger.LogIf(ctx, err)
+				}
+			}(addr, client)
+		}
+		wg.Wait()
+	}()
+}
+
 // PutBucketNotification - calls PutBucketNotification RPC call on all peers.
 func (sys *NotificationSys) PutBucketNotification(ctx context.Context, bucketName string, rulesMap event.RulesMap) {
 	go func() {
@@ -467,6 +485,10 @@ func (args eventArgs) ToEvent() event.Event {
 	creds := globalServerConfig.GetCredential()
 	eventTime := UTCNow()
 	uniqueID := fmt.Sprintf("%X", eventTime.UnixNano())
+	versionId := ""
+	if args.Object.VersionId != "" {
+		versionId = args.Object.VersionId
+	}
 
 	newEvent := event.Event{
 		EventVersion:      "2.0",
@@ -489,8 +511,8 @@ func (args eventArgs) ToEvent() event.Event {
 				ARN:           policy.ResourceARNPrefix + args.BucketName,
 			},
 			Object: event.Object{
-				Key:       url.QueryEscape(args.Object.Name),
-				VersionID: "1",
+				Key:       url.QueryEscape(args.Object.VersionId),
+				VersionID: versionId,
 				Sequencer: uniqueID,
 			},
 		},
@@ -501,7 +523,8 @@ func (args eventArgs) ToEvent() event.Event {
 		},
 	}
 
-	if args.EventName != event.ObjectRemovedDelete {
+	if args.EventName != event.ObjectRemovedDelete &&
+		args.EventName != event.ObjectRemovedVersion {
 		newEvent.S3.Object.ETag = args.Object.ETag
 		newEvent.S3.Object.Size = args.Object.Size
 		newEvent.S3.Object.ContentType = args.Object.ContentType

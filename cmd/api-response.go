@@ -101,6 +101,51 @@ type ListObjectsV2Response struct {
 	EncodingType string `xml:"EncodingType,omitempty"`
 }
 
+type VersionResponse struct {
+	Key          string
+	VersionID    string `xml:"VersionId"`
+	IsLatest     bool
+	ETag         string
+	Size         int64
+	StorageClass string
+	Owner        Owner
+	LastModified string // time string of format "2006-01-02T15:04:05.000Z"
+}
+
+type DeleteMarkerResponse struct {
+	Key          string
+	VersionID    string `xml:"VersionId"`
+	IsLatest     bool
+	Owner        Owner
+	LastModified string // time string of format "2006-01-02T15:04:05.000Z"
+}
+
+// ListObjectsVersionsResponse - format for list objects response.
+type ListObjectsVersionsResponse struct {
+	XMLName xml.Name `xml:"http://s3.amazonaws.com/doc/2006-03-01/ ListVersionsResult" json:"-"`
+
+	Name   string
+	Prefix string
+
+	VersionIdMarker     string
+	NextVersionIdMarker string `xml:"NextVersionIdMarker,omitempty"`
+	KeyMarker           string
+	NextKeyMarker       string `xml:"NextKeyMarker,omitempty"`
+
+	Versions      []VersionResponse      `xml:"Version"`
+	DeleteMarkers []DeleteMarkerResponse `xml:"DeleteMarker"`
+
+	KeyCount  int
+	MaxKeys   int
+	Delimiter string
+	// A flag that indicates whether or not ListObjects returned all of the results
+	// that satisfied the search criteria.
+	IsTruncated bool
+
+	// Encoding type used to encode object keys in the response.
+	EncodingType string `xml:"EncodingType,omitempty"`
+}
+
 // Part container for part metadata.
 type Part struct {
 	PartNumber   int
@@ -255,7 +300,7 @@ type DeleteObjectsResponse struct {
 	XMLName xml.Name `xml:"http://s3.amazonaws.com/doc/2006-03-01/ DeleteResult" json:"-"`
 
 	// Collection of all deleted objects
-	DeletedObjects []ObjectIdentifier `xml:"Deleted,omitempty"`
+	DeletedObjects []ObjectIdentifierDeleted `xml:"Deleted,omitempty"`
 
 	// Collection of errors deleting certain objects.
 	Errors []DeleteError `xml:"Error,omitempty"`
@@ -413,6 +458,53 @@ func generateListObjectsV2Response(bucket, prefix, token, nextToken, startAfter,
 	return data
 }
 
+// generates an ListObjectVersions response for the said bucket with other enumerated options.
+func generateListObjectsVersionsResponse(bucket, prefix, delimiter string, maxKeys int, resp ListObjectsVersionsInfo) (data ListObjectsVersionsResponse) {
+
+	var owner = Owner{
+		ID: globalMinioDefaultOwnerID,
+	}
+
+	for _, version := range resp.Versions {
+		var content = VersionResponse{}
+		content.VersionID = version.VersionId
+		content.IsLatest = version.IsLatest
+		content.Key = version.Key
+		content.LastModified = version.LastModified.UTC().Format(timeFormatAMZLong)
+		if version.ETag != "" {
+			content.ETag = "\"" + version.ETag + "\""
+		}
+		content.Size = version.Size
+		content.StorageClass = version.StorageClass
+		content.Owner = owner
+		data.Versions = append(data.Versions, content)
+	}
+
+	for _, deleteMarker := range resp.DeleteMarkers {
+		var content = DeleteMarkerResponse{}
+		content.VersionID = deleteMarker.VersionId
+		content.IsLatest = deleteMarker.IsLatest
+		content.Key = deleteMarker.Key
+		content.LastModified = deleteMarker.LastModified.UTC().Format(timeFormatAMZLong)
+		content.Owner = owner
+		data.DeleteMarkers = append(data.DeleteMarkers, content)
+	}
+
+	// TODO - support EncodingType in xml decoding
+	data.Name = bucket
+	data.Delimiter = delimiter
+	data.Prefix = prefix
+	data.MaxKeys = maxKeys
+	data.IsTruncated = resp.IsTruncated
+	data.KeyMarker = resp.KeyMarker
+	data.NextKeyMarker = resp.NextKeyMarker
+	data.VersionIdMarker = resp.VersionIdMarker
+	data.NextVersionIdMarker = resp.NextVersionIdMarker
+	data.KeyCount = len(data.Versions) + len(data.DeleteMarkers)
+
+	return
+}
+
 // generates CopyObjectResponse from etag and lastModified time.
 func generateCopyObjectResponse(etag string, lastModified time.Time) CopyObjectResponse {
 	return CopyObjectResponse{
@@ -507,7 +599,7 @@ func generateListMultipartUploadsResponse(bucket string, multipartsInfo ListMult
 }
 
 // generate multi objects delete response.
-func generateMultiDeleteResponse(quiet bool, deletedObjects []ObjectIdentifier, errs []DeleteError) DeleteObjectsResponse {
+func generateMultiDeleteResponse(quiet bool, deletedObjects []ObjectIdentifierDeleted, errs []DeleteError) DeleteObjectsResponse {
 	deleteResp := DeleteObjectsResponse{}
 	if !quiet {
 		deleteResp.DeletedObjects = deletedObjects

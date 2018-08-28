@@ -304,12 +304,13 @@ func (api objectAPIHandlers) DeleteMultipleObjectsHandler(w http.ResponseWriter,
 		return
 	}
 
-	deleteObject := objectAPI.DeleteObject
-	if api.CacheAPI() != nil {
-		deleteObject = api.CacheAPI().DeleteObject
+	deleteObjectFn := objectAPI.DeleteObject
+	if !globalVersioningSys.IsEnabled(bucket) && api.CacheAPI() != nil {
+		deleteObjectFn = api.CacheAPI().DeleteObject
 	}
 
 	var dErrs = make([]error, len(deleteObjects.Objects))
+	var deletedObjPtrs = make([]*ObjectIdentifierDeleted, len(deleteObjects.Objects))
 	for index, object := range deleteObjects.Objects {
 		// If the request is denied access, each item
 		// should be marked as 'AccessDenied'
@@ -320,30 +321,52 @@ func (api objectAPIHandlers) DeleteMultipleObjectsHandler(w http.ResponseWriter,
 			}
 			continue
 		}
-		dErrs[index] = deleteObject(ctx, bucket, object.ObjectName)
+		var dErr error
+		oid := &ObjectIdentifierDeleted{
+			ObjectName: deleteObjects.Objects[index].ObjectName,
+			VersionId:  object.VersionId,
+		}
+		if object.VersionId == "" { // no version specified, do generic delete
+			oid.DeleteMarkerVersionId, dErr = deleteObjectFn(ctx, bucket, object.ObjectName)
+			// Set deleteMarker to true if version id returned from deleteObject
+			oid.DeleteMarker = oid.DeleteMarkerVersionId != ""
+		} else {
+			oid.DeleteMarker, dErr = objectAPI.DeleteObjectVersion(ctx, bucket, object.ObjectName, object.VersionId);
+			 if oid.DeleteMarker {
+				 // When deleting a Delete Marker, set DeleteMarkerVersionId to versionId passed in as per S3 spec
+				oid.DeleteMarkerVersionId = object.VersionId
+			}
+		}
+		deletedObjPtrs[index] = oid
+		dErrs[index] = dErr
 	}
 
 	// Collect deleted objects and errors if any.
-	var deletedObjects []ObjectIdentifier
+	var deletedObjects []ObjectIdentifierDeleted
 	var deleteErrors []DeleteError
 	for index, err := range dErrs {
-		object := deleteObjects.Objects[index]
 		// Success deleted objects are collected separately.
 		if err == nil {
-			deletedObjects = append(deletedObjects, object)
+			deletedObjects = append(deletedObjects, *deletedObjPtrs[index])
 			continue
 		}
 		if _, ok := err.(ObjectNotFound); ok {
 			// If the object is not found it should be
 			// accounted as deleted as per S3 spec.
-			deletedObjects = append(deletedObjects, object)
+			deletedObjects = append(deletedObjects, *deletedObjPtrs[index])
 			continue
+		}
+
+		apiErr := toAPIErrorCode(err)
+		if _, ok := err.(InvalidVersionId); ok {
+			// In case of deleting multiple objects, return back NoSuchVersion for invalid version ids
+			apiErr = ErrNoSuchVersion
 		}
 		// Error during delete should be collected separately.
 		deleteErrors = append(deleteErrors, DeleteError{
-			Code:    errorCodeResponse[toAPIErrorCode(err)].Code,
-			Message: errorCodeResponse[toAPIErrorCode(err)].Description,
-			Key:     object.ObjectName,
+			Code:    errorCodeResponse[apiErr].Code,
+			Message: errorCodeResponse[apiErr].Description,
+			Key:     deleteObjects.Objects[index].ObjectName,
 		})
 	}
 
@@ -361,19 +384,36 @@ func (api objectAPIHandlers) DeleteMultipleObjectsHandler(w http.ResponseWriter,
 		host, port = "", ""
 	}
 
-	// Notify deleted event for objects.
 	for _, dobj := range deletedObjects {
-		sendEvent(eventArgs{
-			EventName:  event.ObjectRemovedDelete,
-			BucketName: bucket,
-			Object: ObjectInfo{
-				Name: dobj.ObjectName,
-			},
-			ReqParams: extractReqParams(r),
-			UserAgent: r.UserAgent(),
-			Host:      host,
-			Port:      port,
-		})
+		if dobj.VersionId == "" {
+			// Notify deleted event for objects.
+			sendEvent(eventArgs{
+				EventName:  event.ObjectRemovedDelete,
+				BucketName: bucket,
+				Object: ObjectInfo{
+					Name:      dobj.ObjectName,
+					VersionId: dobj.DeleteMarkerVersionId, // return Delete Marker version id (if any)
+				},
+				ReqParams: extractReqParams(r),
+				UserAgent: r.UserAgent(),
+				Host:      host,
+				Port:      port,
+			})
+		} else {
+			// Notify removed version of object event (either a real version or a Delete Marker).
+			sendEvent(eventArgs{
+				EventName:  event.ObjectRemovedVersion,
+				BucketName: bucket,
+				Object: ObjectInfo{
+					Name:      dobj.ObjectName,
+					VersionId: dobj.VersionId,
+				},
+				ReqParams: extractReqParams(r),
+				UserAgent: r.UserAgent(),
+				Host:      host,
+				Port:      port,
+			})
+		}
 	}
 }
 
@@ -735,6 +775,7 @@ func (api objectAPIHandlers) DeleteBucketHandler(w http.ResponseWriter, r *http.
 
 	globalNotificationSys.RemoveNotification(bucket)
 	globalPolicySys.Remove(bucket)
+	globalVersioningSys.Remove(bucket)
 	globalNotificationSys.DeleteBucket(ctx, bucket)
 
 	if globalDNSConfig != nil {

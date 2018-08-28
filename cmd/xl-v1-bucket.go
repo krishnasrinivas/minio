@@ -77,7 +77,11 @@ func (xl xlObjects) MakeBucketWithLocation(ctx context.Context, bucket, location
 		// Purge successfully created buckets if we don't have writeQuorum.
 		undoMakeBucket(xl.getDisks(), bucket)
 	}
-	return toObjectErr(err, bucket)
+	if err != nil {
+		return toObjectErr(err, bucket)
+	}
+
+	return nil
 }
 
 func (xl xlObjects) undoDeleteBucket(bucket string) {
@@ -290,6 +294,16 @@ func (xl xlObjects) GetBucketPolicy(ctx context.Context, bucket string) (*policy
 // DeleteBucketPolicy deletes all policies on bucket
 func (xl xlObjects) DeleteBucketPolicy(ctx context.Context, bucket string) error {
 	return removePolicyConfig(ctx, xl, bucket)
+}
+
+// SetBucketVersioning will set a new versioning configuration on bucket
+func (xl xlObjects) SetBucketVersioning(ctx context.Context, bucket string, versioning VersioningConfiguration) error {
+	return saveVersioningConfig(xl, bucket, versioning)
+}
+
+// GetBucketVersioning will get versioning configuration on bucket
+func (xl xlObjects) GetBucketVersioning(ctx context.Context, bucket string) (*VersioningConfiguration, error) {
+	return getVersioningConfig(xl, bucket)
 }
 
 // IsNotificationSupported returns whether bucket notification is applicable for this layer.

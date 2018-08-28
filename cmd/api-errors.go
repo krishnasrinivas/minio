@@ -83,6 +83,7 @@ const (
 	ErrNoSuchBucketPolicy
 	ErrNoSuchKey
 	ErrNoSuchUpload
+	ErrNoSuchVersion
 	ErrNotImplemented
 	ErrPreconditionFailed
 	ErrRequestTimeTooSkewed
@@ -127,6 +128,8 @@ const (
 	ErrMaximumExpires
 	ErrSlowDown
 	ErrInvalidPrefixMarker
+	ErrInvalidVersionId
+	ErrBadRequest
 	// Add new error codes here.
 
 	// Server-Side-Encryption (with Customer provided key) related API errors.
@@ -173,6 +176,7 @@ const (
 	// Minio storage class error codes
 	ErrInvalidStorageClass
 	ErrBackendDown
+	ErrBucketMustBeEmpty
 	// Add new extended error codes here.
 	// Please open a https://github.com/minio/minio/issues before adding
 	// new error codes here.
@@ -540,6 +544,21 @@ var errorCodeResponse = map[APIErrorCode]APIError{
 		Description:    "Invalid marker prefix combination",
 		HTTPStatusCode: http.StatusBadRequest,
 	},
+	ErrInvalidVersionId: {
+		Code:           "InvalidArgument",
+		Description:    "Invalid version id specified",
+		HTTPStatusCode: http.StatusBadRequest,
+	},
+	ErrNoSuchVersion: {
+		Code:           "NoSuchVersion",
+		Description:    "The specified version does not exist.",
+		HTTPStatusCode: http.StatusBadRequest,
+	},
+	ErrBadRequest: {
+		Code:           "BadRequest",
+		Description:    "Bad request",
+		HTTPStatusCode: http.StatusBadRequest,
+	},
 
 	// FIXME: Actual XML error response also contains the header which missed in list of signed header parameters.
 	ErrUnsignedHeaders: {
@@ -842,6 +861,11 @@ var errorCodeResponse = map[APIErrorCode]APIError{
 		Description:    "The continuation token provided is incorrect",
 		HTTPStatusCode: http.StatusBadRequest,
 	},
+	ErrBucketMustBeEmpty: {
+		Code:           "BucketMustBeEmpty",
+		Description:    "Bucket must be empty for versioning to be enabled.",
+		HTTPStatusCode: http.StatusBadRequest,
+	},
 	// Add your error structure here.
 }
 
@@ -990,6 +1014,8 @@ func toAPIErrorCode(err error) (apiErr APIErrorCode) {
 		apiErr = ErrUnsupportedNotification
 	case BackendDown:
 		apiErr = ErrBackendDown
+	case InvalidVersionId:
+		apiErr = ErrInvalidVersionId
 	default:
 		apiErr = ErrInternalError
 	}

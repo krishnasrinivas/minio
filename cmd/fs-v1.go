@@ -498,6 +498,23 @@ func (fs *FSObjects) CopyObject(ctx context.Context, srcBucket, srcObject, dstBu
 	return objInfo, nil
 }
 
+func (fs *FSObjects) ListObjectVersions(ctx context.Context, bucket, prefix, delimiter, keyMarker, versionIDMarker string, maxKeys int) (result ListObjectsVersionsInfo, err error) {
+	return result, NotImplemented{}
+}
+
+func (fs *FSObjects) CopyObjectVersion(ctx context.Context, srcBucket, srcObject, version, dstBucket, dstObject string, srcInfo ObjectInfo) (oi ObjectInfo, e error) {
+	return fs.CopyObject(ctx, srcBucket, srcObject, dstBucket, dstObject, srcInfo)
+}
+
+func (fs *FSObjects) GetObjectVersion(ctx context.Context, bucket, object, version string, offset int64, length int64, writer io.Writer, etag string) (err error) {
+	return fs.GetObject(ctx, bucket, object, offset, length, writer, etag)
+}
+
+func (fs *FSObjects) GetObjectInfoVersion(ctx context.Context, bucket, object, version string) (oi ObjectInfo, dm bool, e error) {
+	oi, e = fs.GetObjectInfo(ctx, bucket, object)
+	return
+}
+
 // GetObject - reads an object from the disk.
 // Supports additional parameters like offset and length
 // which are synonymous with HTTP Range requests.
@@ -906,20 +923,20 @@ func (fs *FSObjects) putObject(ctx context.Context, bucket string, object string
 
 // DeleteObject - deletes an object from a bucket, this operation is destructive
 // and there are no rollbacks supported.
-func (fs *FSObjects) DeleteObject(ctx context.Context, bucket, object string) error {
+func (fs *FSObjects) DeleteObject(ctx context.Context, bucket, object string) (versionId string, err error) {
 	// Acquire a write lock before deleting the object.
 	objectLock := fs.nsMutex.NewNSLock(bucket, object)
-	if err := objectLock.GetLock(globalOperationTimeout); err != nil {
-		return err
+	if err = objectLock.GetLock(globalOperationTimeout); err != nil {
+		return
 	}
 	defer objectLock.Unlock()
 
-	if err := checkDelObjArgs(ctx, bucket, object); err != nil {
-		return err
+	if err = checkDelObjArgs(ctx, bucket, object); err != nil {
+		return
 	}
 
-	if _, err := fs.statBucketDir(ctx, bucket); err != nil {
-		return toObjectErr(err, bucket)
+	if _, err = fs.statBucketDir(ctx, bucket); err != nil {
+		return "", toObjectErr(err, bucket)
 	}
 
 	minioMetaBucketDir := pathJoin(fs.fsPath, minioMetaBucket)
@@ -932,23 +949,28 @@ func (fs *FSObjects) DeleteObject(ctx context.Context, bucket, object string) er
 		}
 		if lerr != nil && lerr != errFileNotFound {
 			logger.LogIf(ctx, lerr)
-			return toObjectErr(lerr, bucket, object)
+			return "", toObjectErr(lerr, bucket, object)
 		}
 	}
 
 	// Delete the object.
-	if err := fsDeleteFile(ctx, pathJoin(fs.fsPath, bucket), pathJoin(fs.fsPath, bucket, object)); err != nil {
-		return toObjectErr(err, bucket, object)
+	if err = fsDeleteFile(ctx, pathJoin(fs.fsPath, bucket), pathJoin(fs.fsPath, bucket, object)); err != nil {
+		return "", toObjectErr(err, bucket, object)
 	}
 
 	if bucket != minioMetaBucket {
 		// Delete the metadata object.
 		err := fsDeleteFile(ctx, minioMetaBucketDir, fsMetaPath)
 		if err != nil && err != errFileNotFound {
-			return toObjectErr(err, bucket, object)
+			return "", toObjectErr(err, bucket, object)
 		}
 	}
-	return nil
+	return "", nil
+}
+
+// DeleteObjectVersion - not implemented for FS
+func (fs *FSObjects) DeleteObjectVersion(ctx context.Context, bucket, object, version string) (deleteMarker bool, err error) {
+	return false, NotImplemented{}
 }
 
 // Returns function "listDir" of the type listDirFunc.
@@ -1102,7 +1124,7 @@ func (fs *FSObjects) ListObjects(ctx context.Context, bucket, prefix, marker, de
 	}
 
 	heal := false // true only for xl.ListObjectsHeal()
-	walkResultCh, endWalkCh := fs.listPool.Release(listParams{bucket, recursive, marker, prefix, heal})
+	walkResultCh, endWalkCh := fs.listPool.Release(listParams{bucket, recursive, marker, prefix, heal, ""})
 	if walkResultCh == nil {
 		endWalkCh = make(chan struct{})
 		isLeaf := func(bucket, object string) bool {
@@ -1156,7 +1178,7 @@ func (fs *FSObjects) ListObjects(ctx context.Context, bucket, prefix, marker, de
 	}
 
 	// Save list routine for the next marker if we haven't reached EOF.
-	params := listParams{bucket, recursive, nextMarker, prefix, heal}
+	params := listParams{bucket, recursive, nextMarker, prefix, heal, ""}
 	if !eof {
 		fs.listPool.Set(params, walkResultCh, endWalkCh)
 	}
@@ -1226,6 +1248,14 @@ func (fs *FSObjects) GetBucketPolicy(ctx context.Context, bucket string) (*polic
 // DeleteBucketPolicy deletes all policies on bucket
 func (fs *FSObjects) DeleteBucketPolicy(ctx context.Context, bucket string) error {
 	return removePolicyConfig(ctx, fs, bucket)
+}
+
+func (fs *FSObjects) GetBucketVersioning(ctx context.Context, bucket string) (*VersioningConfiguration, error) {
+	return nil, NotImplemented{}
+}
+
+func (fs *FSObjects) SetBucketVersioning(ctx context.Context, bucket string, versioningConfig VersioningConfiguration) error {
+	return NotImplemented{}
 }
 
 // ListObjectsV2 lists all blobs in bucket filtered by prefix

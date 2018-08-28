@@ -192,6 +192,7 @@ func (web *webAPIHandlers) DeleteBucket(r *http.Request, args *RemoveBucketArgs,
 
 	globalNotificationSys.RemoveNotification(args.BucketName)
 	globalPolicySys.Remove(args.BucketName)
+	globalVersioningSys.Remove(args.BucketName)
 	globalNotificationSys.DeleteBucket(ctx, args.BucketName)
 
 	if globalDNSConfig != nil {
@@ -402,7 +403,7 @@ next:
 				}
 			}
 
-			if err = deleteObject(nil, objectAPI, web.CacheAPI(), args.BucketName, objectName, r); err != nil {
+			if _, err = deleteObject(nil, objectAPI, web.CacheAPI(), args.BucketName, objectName, r); err != nil {
 				break next
 			}
 			continue
@@ -418,7 +419,7 @@ next:
 			}
 			marker = lo.NextMarker
 			for _, obj := range lo.Objects {
-				err = deleteObject(nil, objectAPI, web.CacheAPI(), args.BucketName, obj.Name, r)
+				_, err = deleteObject(nil, objectAPI, web.CacheAPI(), args.BucketName, obj.Name, r)
 				if err != nil {
 					break next
 				}

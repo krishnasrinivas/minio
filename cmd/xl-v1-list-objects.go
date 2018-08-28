@@ -70,7 +70,7 @@ func (xl xlObjects) listObjects(ctx context.Context, bucket, prefix, marker, del
 	}
 
 	heal := false // true only for xl.ListObjectsHeal
-	walkResultCh, endWalkCh := xl.listPool.Release(listParams{bucket, recursive, marker, prefix, heal})
+	walkResultCh, endWalkCh := xl.listPool.Release(listParams{bucket, recursive, marker, prefix, heal, ""})
 	if walkResultCh == nil {
 		endWalkCh = make(chan struct{})
 		isLeaf := xl.isObject
@@ -104,7 +104,7 @@ func (xl xlObjects) listObjects(ctx context.Context, bucket, prefix, marker, del
 		} else {
 			// Set the Mode to a "regular" file.
 			var err error
-			objInfo, err = xl.getObjectInfo(ctx, bucket, entry)
+			objInfo, _, err = xl.getObjectInfoVersion(ctx, bucket, entry, "")
 			if err != nil {
 				// Ignore errFileNotFound as the object might have got
 				// deleted in the interim period of listing and getObjectInfo(),
@@ -125,7 +125,7 @@ func (xl xlObjects) listObjects(ctx context.Context, bucket, prefix, marker, del
 		}
 	}
 
-	params := listParams{bucket, recursive, nextMarker, prefix, heal}
+	params := listParams{bucket, recursive, nextMarker, prefix, heal, ""}
 	if !eof {
 		xl.listPool.Set(params, walkResultCh, endWalkCh)
 	}

@@ -182,6 +182,13 @@ func (e PrefixAccessDenied) Error() string {
 	return "Prefix access is denied: " + e.Bucket + "/" + e.Object
 }
 
+// Version id is invalid for object (versioned buckets).
+type InvalidVersionId GenericError
+
+func (e InvalidVersionId) Error() string {
+	return "The specified version does not exist."
+}
+
 // BucketExists bucket exists.
 type BucketExists GenericError
 
@@ -221,6 +228,13 @@ type BucketPolicyNotFound GenericError
 
 func (e BucketPolicyNotFound) Error() string {
 	return "No bucket policy found for bucket: " + e.Bucket
+}
+
+// BucketVersioningNotFound - no bucket versioning found.
+type BucketVersioningNotFound GenericError
+
+func (e BucketVersioningNotFound) Error() string {
+	return "No bucket versioning found for bucket: " + e.Bucket
 }
 
 /// Bucket related errors.

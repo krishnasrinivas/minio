@@ -88,6 +88,9 @@ type ObjectInfo struct {
 	// Hex encoded unique entity tag of the object.
 	ETag string
 
+	// VersionId when bucket versioning is enabled.
+	VersionId string
+
 	// A standard MIME type describing the format of the object.
 	ContentType string
 
@@ -242,6 +245,47 @@ type ListObjectsV2Info struct {
 
 	// List of prefixes for this request.
 	Prefixes []string
+}
+
+// Base version info
+type VersionInfoBase struct {
+	Key          string
+	VersionId    string
+	IsLatest     bool
+	LastModified time.Time
+	Owner        Owner
+}
+
+// Regular version info
+type VersionInfo struct {
+	VersionInfoBase
+	ETag         string
+	Size         int64
+	StorageClass string
+}
+
+// Version info for delete markers
+type DeleteMarkerInfo struct {
+	VersionInfoBase
+}
+
+// ListObjectsVersionsInfo - container for list objects versions.
+type ListObjectsVersionsInfo struct {
+	// Indicates whether the returned list objects response is truncated. A
+	// value of true indicates that the list was truncated. The list can be truncated
+	// if the number of objects exceeds the limit allowed or specified
+	// by max keys.
+	IsTruncated bool
+
+	KeyMarker     string
+	NextKeyMarker string
+
+	VersionIdMarker     string
+	NextVersionIdMarker string
+
+	// List of objects info for this request.
+	Versions      []VersionInfo
+	DeleteMarkers []DeleteMarkerInfo
 }
 
 // PartInfo - represents individual part metadata.

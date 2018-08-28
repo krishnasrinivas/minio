@@ -75,6 +75,8 @@ func (api objectAPIHandlers) GetObjectHandler(w http.ResponseWriter, r *http.Req
 	bucket = vars["bucket"]
 	object = vars["object"]
 
+	versionID := r.URL.Query().Get("versionId")
+
 	// Fetch object stat info.
 	objectAPI := api.ObjectAPI()
 	if objectAPI == nil {
@@ -82,9 +84,12 @@ func (api objectAPIHandlers) GetObjectHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	getObjectInfo := objectAPI.GetObjectInfo
-	if api.CacheAPI() != nil {
-		getObjectInfo = api.CacheAPI().GetObjectInfo
+	getObjectInfoVersion := objectAPI.GetObjectInfoVersion
+	if !globalVersioningSys.IsEnabled(bucket) && api.CacheAPI() != nil {
+		getObjectInfoVersion = func(ctx context.Context, bucket, object, version string) (objInfo ObjectInfo, deleteMarker bool, err error) {
+			objInfo, err = api.CacheAPI().GetObjectInfo(ctx, bucket, object)
+			return
+		}
 	}
 
 	if s3Error := checkRequestAuthType(ctx, r, policy.GetObjectAction, bucket, object); s3Error != ErrNone {
@@ -99,7 +104,7 @@ func (api objectAPIHandlers) GetObjectHandler(w http.ResponseWriter, r *http.Req
 				ConditionValues: getConditionValues(r, ""),
 				IsOwner:         false,
 			}) {
-				_, err := getObjectInfo(ctx, bucket, object)
+				_, _, err := getObjectInfoVersion(ctx, bucket, object, versionID)
 				if toAPIErrorCode(err) == ErrNoSuchKey {
 					s3Error = ErrNoSuchKey
 				}
@@ -109,8 +114,11 @@ func (api objectAPIHandlers) GetObjectHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	objInfo, err := getObjectInfo(ctx, bucket, object)
+	objInfo, deleteMarker, err := getObjectInfoVersion(ctx, bucket, object, versionID)
 	if err != nil {
+		if deleteMarker {
+			w.Header().Set("x-amz-delete-marker", "true")
+		}
 		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
 		return
 	}
@@ -175,13 +183,15 @@ func (api objectAPIHandlers) GetObjectHandler(w http.ResponseWriter, r *http.Req
 	setHeadGetRespHeaders(w, r.URL.Query())
 	httpWriter := ioutil.WriteOnClose(writer)
 
-	getObject := objectAPI.GetObject
-	if api.CacheAPI() != nil && !hasSSECustomerHeader(r.Header) {
-		getObject = api.CacheAPI().GetObject
+	getObjectVersion := objectAPI.GetObjectVersion
+	if api.CacheAPI() != nil && versionID == "" && !hasSSECustomerHeader(r.Header) {
+		getObjectVersion = func(ctx context.Context, bucket, object, version string, startOffset int64, length int64, writer io.Writer, etag string) (err error) {
+			return api.CacheAPI().GetObject(ctx, bucket, object, startOffset, length, writer, etag)
+		}
 	}
 
 	// Reads the object at startOffset and writes to mw.
-	if err = getObject(ctx, bucket, object, startOffset, length, httpWriter, objInfo.ETag); err != nil {
+	if err = getObjectVersion(ctx, bucket, object, versionID, startOffset, length, httpWriter, objInfo.ETag); err != nil {
 		if !httpWriter.HasWritten() { // write error response only if no data has been written to client yet
 			writeErrorResponse(w, toAPIErrorCode(err), r.URL)
 		}
@@ -225,15 +235,20 @@ func (api objectAPIHandlers) HeadObjectHandler(w http.ResponseWriter, r *http.Re
 	bucket = vars["bucket"]
 	object = vars["object"]
 
+	versionID := r.URL.Query().Get("versionId")
+
 	objectAPI := api.ObjectAPI()
 	if objectAPI == nil {
 		writeErrorResponseHeadersOnly(w, ErrServerNotInitialized)
 		return
 	}
 
-	getObjectInfo := objectAPI.GetObjectInfo
-	if api.CacheAPI() != nil {
-		getObjectInfo = api.CacheAPI().GetObjectInfo
+	getObjectInfoVersion := objectAPI.GetObjectInfoVersion
+	if !globalVersioningSys.IsEnabled(bucket) && api.CacheAPI() != nil {
+		getObjectInfoVersion = func(ctx context.Context, bucket, object, version string) (objInfo ObjectInfo, deleteMarker bool, err error) {
+			objInfo, err = api.CacheAPI().GetObjectInfo(ctx, bucket, object)
+			return
+		}
 	}
 
 	if s3Error := checkRequestAuthType(ctx, r, policy.GetObjectAction, bucket, object); s3Error != ErrNone {
@@ -248,7 +263,7 @@ func (api objectAPIHandlers) HeadObjectHandler(w http.ResponseWriter, r *http.Re
 				ConditionValues: getConditionValues(r, ""),
 				IsOwner:         false,
 			}) {
-				_, err := getObjectInfo(ctx, bucket, object)
+				_, _, err := getObjectInfoVersion(ctx, bucket, object, versionID)
 				if toAPIErrorCode(err) == ErrNoSuchKey {
 					s3Error = ErrNoSuchKey
 				}
@@ -258,9 +273,14 @@ func (api objectAPIHandlers) HeadObjectHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	objInfo, err := getObjectInfo(ctx, bucket, object)
+	objInfo, _, err := getObjectInfoVersion(ctx, bucket, object, versionID)
 	if err != nil {
-		writeErrorResponseHeadersOnly(w, toAPIErrorCode(err))
+		if _, ok := err.(InvalidVersionId); ok && versionID != "" {
+			// AWS S3 returns BadRequest on HEAD calls for invalid version ids
+			writeErrorResponseHeadersOnly(w, ErrBadRequest)
+		} else {
+			writeErrorResponseHeadersOnly(w, toAPIErrorCode(err))
+		}
 		return
 	}
 
@@ -366,7 +386,18 @@ func (api objectAPIHandlers) CopyObjectHandler(w http.ResponseWriter, r *http.Re
 		cpSrcPath = r.Header.Get("X-Amz-Copy-Source")
 	}
 
-	srcBucket, srcObject := path2BucketAndObject(cpSrcPath)
+	versionId := ""
+
+	cpSrcURL, err := url.Parse(cpSrcPath)
+	if err != nil {
+		// FIXME: check AWS for error
+		writeErrorResponse(w, ErrInvalidCopySource, r.URL)
+		return
+	} else {
+		versionId = cpSrcURL.Query().Get("versionId")
+	}
+
+	srcBucket, srcObject := path2BucketAndObject(cpSrcURL.Path)
 	// If source object is empty or bucket is empty, reply back invalid copy source.
 	if srcObject == "" || srcBucket == "" {
 		writeErrorResponse(w, ErrInvalidCopySource, r.URL)
@@ -380,7 +411,7 @@ func (api objectAPIHandlers) CopyObjectHandler(w http.ResponseWriter, r *http.Re
 	}
 
 	cpSrcDstSame := isStringEqual(pathJoin(srcBucket, srcObject), pathJoin(dstBucket, dstObject))
-	srcInfo, err := objectAPI.GetObjectInfo(ctx, srcBucket, srcObject)
+	srcInfo, _, err := objectAPI.GetObjectInfoVersion(ctx, srcBucket, srcObject, versionId)
 	if err != nil {
 		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
 		return
@@ -417,7 +448,7 @@ func (api objectAPIHandlers) CopyObjectHandler(w http.ResponseWriter, r *http.Re
 
 	// We have to copy metadata only if source and destination are same.
 	// this changes for encryption which can be observed below.
-	if cpSrcDstSame {
+	if cpSrcDstSame && !globalVersioningSys.IsEnabled(dstBucket) {
 		srcInfo.metadataOnly = true
 	}
 
@@ -468,8 +499,10 @@ func (api objectAPIHandlers) CopyObjectHandler(w http.ResponseWriter, r *http.Re
 				return
 			}
 
-			// Since we are rotating the keys, make sure to update the metadata.
-			srcInfo.metadataOnly = true
+			if !globalVersioningSys.IsEnabled(dstBucket) {
+				// Since we are rotating the keys, make sure to update the metadata.
+				srcInfo.metadataOnly = true
+			}
 		} else {
 			if sseCopyC {
 				// Source is encrypted make sure to save the encrypted size.
@@ -571,7 +604,7 @@ func (api objectAPIHandlers) CopyObjectHandler(w http.ResponseWriter, r *http.Re
 		var dstRecords []dns.SrvRecord
 		if dstRecords, err = globalDNSConfig.Get(dstBucket); err == nil {
 			go func() {
-				if gerr := objectAPI.GetObject(ctx, srcBucket, srcObject, 0, srcInfo.Size, srcInfo.Writer, srcInfo.ETag); gerr != nil {
+				if gerr := objectAPI.GetObjectVersion(ctx, srcBucket, srcObject, versionId, 0, srcInfo.Size, srcInfo.Writer, srcInfo.ETag); gerr != nil {
 					pipeWriter.CloseWithError(gerr)
 					writeErrorResponse(w, ErrInternalError, r.URL)
 					return
@@ -600,7 +633,7 @@ func (api objectAPIHandlers) CopyObjectHandler(w http.ResponseWriter, r *http.Re
 	} else {
 		// Copy source object to destination, if source and destination
 		// object is same then only metadata is updated.
-		objInfo, err = objectAPI.CopyObject(ctx, srcBucket, srcObject, dstBucket, dstObject, srcInfo)
+		objInfo, err = objectAPI.CopyObjectVersion(ctx, srcBucket, srcObject, versionId, dstBucket, dstObject, srcInfo)
 		if err != nil {
 			pipeWriter.CloseWithError(err)
 			writeErrorResponse(w, toAPIErrorCode(err), r.URL)
@@ -612,6 +645,16 @@ func (api objectAPIHandlers) CopyObjectHandler(w http.ResponseWriter, r *http.Re
 
 	response := generateCopyObjectResponse(objInfo.ETag, objInfo.ModTime)
 	encodedSuccessResponse := encodeResponse(response)
+
+	if versionId != "" {
+		// Add version id for source object
+		w.Header().Set("x-amz-copy-source-version-id", "\""+versionId+"\"")
+	}
+
+	if objInfo.VersionId != "" {
+		// Add version id for destination object
+		w.Header().Set("x-amz-version-id", objInfo.VersionId)
+	}
 
 	// Write success response.
 	writeSuccessResponseXML(w, encodedSuccessResponse)
@@ -819,6 +862,10 @@ func (api objectAPIHandlers) PutObjectHandler(w http.ResponseWriter, r *http.Req
 			w.Header().Set(SSECustomerAlgorithm, r.Header.Get(SSECustomerAlgorithm))
 			w.Header().Set(SSECustomerKeyMD5, r.Header.Get(SSECustomerKeyMD5))
 		}
+	}
+
+	if objInfo.VersionId != "" {
+		w.Header().Set("x-amz-version-id", objInfo.VersionId)
 	}
 
 	writeSuccessResponseHeadersOnly(w)
@@ -1493,6 +1540,10 @@ func (api objectAPIHandlers) CompleteMultipartUploadHandler(w http.ResponseWrite
 	// Set etag.
 	w.Header().Set("ETag", "\""+objInfo.ETag+"\"")
 
+	if objInfo.VersionId != "" {
+		w.Header().Set("x-amz-version-id", objInfo.VersionId)
+	}
+
 	// Write success response.
 	writeSuccessResponseXML(w, encodedSuccessResponse)
 
@@ -1564,10 +1615,34 @@ func (api objectAPIHandlers) DeleteObjectHandler(w http.ResponseWriter, r *http.
 		}
 	}
 
-	// http://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectDELETE.html
-	// Ignore delete object errors while replying to client, since we are
-	// suppposed to reply only 204. Additionally log the error for
-	// investigation.
-	deleteObject(ctx, objectAPI, api.CacheAPI(), bucket, object, r)
+	versionId := r.URL.Query().Get("versionId")
+
+	if versionId == "" {
+		// http://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectDELETE.html
+		// Ignore delete object errors while replying to client, since we are
+		// supposed to reply only 204. Additionally log the error for
+		// investigation.
+		versionIdResponse, _ := deleteObject(ctx, objectAPI, api.CacheAPI(), bucket, object, r)
+
+		if versionIdResponse != "" {
+			w.Header().Set("x-amz-version-id", versionIdResponse)
+			w.Header().Set("x-amz-delete-marker", "true")
+		}
+	} else {
+		// http://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectDELETE.html
+		// Ignore delete object errors while replying to client, since we are
+		// supposed to reply only 204. Additionally log the error for
+		// investigation.
+		deleteMarker, err := deleteObjectVersion(ctx, objectAPI, bucket, object, versionId, r)
+		if err != nil {
+			writeErrorResponse(w, toAPIErrorCode(err), r.URL)
+			return
+		}
+		w.Header().Set("x-amz-version-id", versionId)
+		if deleteMarker {
+			w.Header().Set("x-amz-delete-marker", "true")
+		}
+	}
+
 	writeSuccessNoContent(w)
 }
