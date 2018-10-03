@@ -293,7 +293,7 @@ func (client *storageRESTClient) DeleteFile(volume, path string) error {
 	values.Set(storageRESTFilePath, path)
 	respBody, err := client.call(storageRESTMethodDeleteFile, values, nil)
 	defer CloseResponse(respBody)
-	return nil
+	return err
 }
 
 // RenameFile - renames a file.
