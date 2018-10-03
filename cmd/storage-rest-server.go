@@ -51,7 +51,7 @@ func (s *storageRESTServer) IsValid(w http.ResponseWriter, r *http.Request) bool
 		s.writeErrorResponse(w, err)
 		return false
 	}
-	utcNow := time.Now()
+	utcNow := UTCNow()
 	delta := requestTime.Sub(utcNow)
 	if delta < 0 {
 		delta = delta * -1
@@ -73,6 +73,7 @@ func (s *storageRESTServer) DiskInfoHandler(w http.ResponseWriter, r *http.Reque
 		s.writeErrorResponse(w, err)
 		return
 	}
+	defer w.(http.Flusher).Flush()
 	gob.NewEncoder(w).Encode(info)
 }
 
@@ -99,6 +100,7 @@ func (s *storageRESTServer) ListVolsHandler(w http.ResponseWriter, r *http.Reque
 		s.writeErrorResponse(w, err)
 		return
 	}
+	defer w.(http.Flusher).Flush()
 	gob.NewEncoder(w).Encode(&infos)
 }
 
@@ -114,6 +116,7 @@ func (s *storageRESTServer) StatVolHandler(w http.ResponseWriter, r *http.Reques
 		s.writeErrorResponse(w, err)
 		return
 	}
+	defer w.(http.Flusher).Flush()
 	gob.NewEncoder(w).Encode(info)
 }
 
@@ -159,6 +162,11 @@ func (s *storageRESTServer) AppendFileHandler(w http.ResponseWriter, r *http.Req
 	volume := vars[storageRESTVolume]
 	filePath := vars[storageRESTFilePath]
 
+	if r.ContentLength < 0 {
+		s.writeErrorResponse(w, errInvalidArgument)
+		return
+	}
+
 	buf := make([]byte, r.ContentLength)
 	_, err := io.ReadFull(r.Body, buf)
 	if err != nil {
@@ -185,6 +193,7 @@ func (s *storageRESTServer) StatFileHandler(w http.ResponseWriter, r *http.Reque
 		s.writeErrorResponse(w, err)
 		return
 	}
+	defer w.(http.Flusher).Flush()
 	gob.NewEncoder(w).Encode(info)
 }
 
@@ -222,6 +231,10 @@ func (s *storageRESTServer) ReadFileHandler(w http.ResponseWriter, r *http.Reque
 	length, err := strconv.Atoi(vars[storageRESTLength])
 	if err != nil {
 		s.writeErrorResponse(w, err)
+		return
+	}
+	if offset < 0 || length < 0 {
+		s.writeErrorResponse(w, errInvalidArgument)
 		return
 	}
 	var verifier *BitrotVerifier
@@ -262,6 +275,7 @@ func (s *storageRESTServer) ListDirHandler(w http.ResponseWriter, r *http.Reques
 		s.writeErrorResponse(w, err)
 		return
 	}
+	defer w.(http.Flusher).Flush()
 	gob.NewEncoder(w).Encode(&entries)
 }
 
