@@ -194,7 +194,8 @@ func (s *xlSets) connectDisksWithQuorum() {
 			s.xlDisks[i][j] = disk
 			onlineDisks++
 		}
-		// Sleep for a while - so that we don't go into 100% CPU when half the disks are online.
+		// Sleep for a while - so that we don't go into
+		// 100% CPU when half the disks are online.
 		time.Sleep(500 * time.Millisecond)
 	}
 }

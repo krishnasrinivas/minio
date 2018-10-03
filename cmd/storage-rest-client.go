@@ -291,8 +291,9 @@ func (client *storageRESTClient) DeleteFile(volume, path string) error {
 	values := make(url.Values)
 	values.Set(storageRESTVolume, volume)
 	values.Set(storageRESTFilePath, path)
-	_, err := client.call(storageRESTMethodDeleteFile, values, nil)
-	return err
+	respBody, err := client.call(storageRESTMethodDeleteFile, values, nil)
+	defer CloseResponse(respBody)
+	return nil
 }
 
 // RenameFile - renames a file.
