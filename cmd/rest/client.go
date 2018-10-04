@@ -30,10 +30,10 @@ import (
 	xhttp "github.com/minio/minio/cmd/http"
 )
 
-// DefaultRESTTimeout - default RPC timeout is one minute.
+// DefaultRESTTimeout - default REST timeout is one minute.
 const DefaultRESTTimeout = 1 * time.Minute
 
-// Client - http based RPC client.
+// Client - http based REST client.
 type Client struct {
 	httpClient   *http.Client
 	url          *url.URL
@@ -56,9 +56,10 @@ func (c *Client) Call(method string, values url.Values, body io.Reader) (reply i
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		defer closeResponse(resp)
+
 		// Limit the ReadAll(), just in case, because of a bug, the server responds with large data.
-		r := io.LimitReader(resp.Body, 1024)
-		b, err := ioutil.ReadAll(r)
+		b, err := ioutil.ReadAll(io.LimitReader(resp.Body, 1024))
 		if err != nil {
 			return nil, err
 		}
@@ -84,7 +85,7 @@ func newCustomDialContext(timeout time.Duration) func(ctx context.Context, netwo
 	}
 }
 
-// NewClient - returns new RPC client.
+// NewClient - returns new REST client.
 func NewClient(url *url.URL, tlsConfig *tls.Config, timeout time.Duration, newAuthToken func() string) *Client {
 	return &Client{
 		httpClient: &http.Client{
