@@ -1,4 +1,3 @@
-
 package cmd
 
 /*
@@ -99,6 +98,7 @@ import "C"
 import (
 	"errors"
 	"fmt"
+	"os"
 	"runtime"
 	"strings"
 	"unsafe"
@@ -177,7 +177,7 @@ var largeBlockPool unsafe.Pointer
 // var kvPoolLock sync.Mutex
 
 func kvs_init_env() {
-        fmt.Println("len(globalEndpoints)", len(globalEndpoints))
+	fmt.Println("len(globalEndpoints)", len(globalEndpoints))
 	C.minio_kvs_init_env()
 	KVIOCH = make(chan KVIO, 1024*len(globalEndpoints))
 	go kv_io()
@@ -212,13 +212,18 @@ func kvAllocBloc() []byte {
 	var buf unsafe.Pointer
 	//	kvPoolLock.Lock()
 	//	C._kvs_mempool_get(largeBlockPool, &buf)
-	buf = C._kvs_zalloc(C.ulong(kvValueSize*len(globalEndpoints)), C.ulong(4*1024), nil)
+	totalSize := kvValueSize * len(globalEndpoints)
+	buf = C._kvs_zalloc(C.ulong(totalSize), C.ulong(4*1024), nil)
 	//	kvPoolLock.Unlock()
 	if buf == nil {
 		panic("C._kvs_mempool_get largeBlockPool failed")
 	}
+	b := (*[1 << 30]byte)(unsafe.Pointer(buf))[:totalSize:totalSize]
 	size := kvValueSize * len(globalEndpoints)
-	return (*[1 << 30]byte)(unsafe.Pointer(buf))[:size:size]
+	if os.Getenv("KV_ENABLE_ERASURE") != "" {
+		size = kvValueSize * (len(globalEndpoints) - 1)
+	}
+	return b[:size]
 }
 
 func kvFree(buf []byte) {

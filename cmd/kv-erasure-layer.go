@@ -115,6 +115,17 @@ func (k *KVErasureLayer) GetBucketInfo(ctx context.Context, bucket string) (buck
 	return BucketInfo{bucket, time.Now()}, nil
 }
 
+func kvGetOrderedDisks(disks []KVAPI, object string) []KVAPI {
+	distribution := hashOrder(object, len(disks))
+	shuffledDisks := make([]KVAPI, len(disks))
+	// Shuffle disks for expected distribution.
+	for index := range disks {
+		blockIndex := distribution[index]
+		shuffledDisks[blockIndex-1] = disks[index]
+	}
+	return shuffledDisks
+}
+
 func (k *KVErasureLayer) PutObject(ctx context.Context, bucket, object string, data *hash.Reader, metadata map[string]string) (objInfo ObjectInfo, err error) {
 	objectLock := globalNSMutex.NewNSLock(bucket, object)
 	if err := objectLock.GetLock(globalObjectTimeout); err != nil {
@@ -124,8 +135,9 @@ func (k *KVErasureLayer) PutObject(ctx context.Context, bucket, object string, d
 
 	dataDrives, parityDrives := getRedundancyCount(metadata[amzStorageClass], len(k.disks))
 	erasure := newKVErasure(dataDrives, parityDrives)
-	disks := make([]KVAPI, len(k.disks))
-	copy(disks, k.disks)
+	disks := kvGetOrderedDisks(k.disks, object)
+	// disks := make([]KVAPI, len(k.disks))
+	// copy(disks, k.disks)
 	ids, n, err := erasure.Encode(ctx, disks, bucket, data)
 	if err != nil {
 		return objInfo, err
@@ -285,10 +297,10 @@ func (k *KVErasureLayer) DeleteObject(ctx context.Context, bucket, object string
 }
 
 func kvQuorumPart(ctx context.Context, entries []KVNSEntry, errs []error) (KVNSEntry, error) {
-        for i := range errs {
-	    if errs[i] == nil {
-	       return entries[i], nil
-	    }
+	for i := range errs {
+		if errs[i] == nil {
+			return entries[i], nil
+		}
 	}
 	// if err := reduceReadQuorumErrs(ctx, errs, nil, len(entries)); err != nil {
 	// 	return KVNSEntry{}, err
@@ -350,8 +362,9 @@ func (k *KVErasureLayer) GetObject(ctx context.Context, bucket, object string, s
 	if entry.Size == 0 {
 		return nil
 	}
-	disks := make([]KVAPI, len(k.disks))
-	copy(disks, k.disks)
+	disks := kvGetOrderedDisks(k.disks, object)
+	// disks := make([]KVAPI, len(k.disks))
+	// copy(disks, k.disks)
 	erasure := newKVErasure(entry.DataNumber, entry.ParityNumber)
 	partIndex, partOffset := entry.partIndexAndOffset(startOffset)
 	var totalBytesRead int64

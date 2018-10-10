@@ -67,6 +67,9 @@ func kvAlloc() []byte {
 }
 
 func kvAllocBloc() []byte {
+	if os.Getenv("KV_ENABLE_ERASURE") != "" {
+		return make([]byte, (len(globalEndpoints)-1)*kvValueSize)
+	}
 	return make([]byte, len(globalEndpoints)*kvValueSize)
 }
 

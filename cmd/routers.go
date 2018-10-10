@@ -52,8 +52,6 @@ var globalHandlers = []HandlerFunc{
 	addrequestIDHeader,
 	// set HTTP security headers such as Content-Security-Policy.
 	addSecurityHeaders,
-	// Add logging.
-	setApacheLoggingHandler,
 	// Forward path style requests to actual host in a bucket federated setup.
 	setBucketForwardingHandler,
 	// Ratelimit the incoming requests using a token bucket algorithm
