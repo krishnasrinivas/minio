@@ -742,8 +742,32 @@ func fixFormatXLV3(storageDisks []StorageAPI, endpoints EndpointList, formats []
 	return nil
 }
 
+// Return error if any of the disks are root-disks.
+func checkAnyRootDisk(storageDisks []StorageAPI) error {
+	infos, errs := getAllDiskInfos(storageDisks)
+	if isTestSetup(infos, errs) {
+		// Allow formating of root disks for test setups to help with testing.
+		return nil
+	}
+	for i := range storageDisks {
+		if errs[i] != nil {
+			return fmt.Errorf("cannot format %s : %s", storageDisks[i], errs[i].Error())
+		}
+		if infos[i].RootDisk {
+			// We should not format on root disk. i.e in a situation where the minio-administrator has forgotten
+			// to mount a disk on the mountpoint.
+			return fmt.Errorf("cannot format %s : no disk mounted at the mountpoint", storageDisks[i])
+		}
+	}
+	return nil
+}
+
 // initFormatXL - save XL format configuration on all disks.
 func initFormatXL(ctx context.Context, storageDisks []StorageAPI, setCount, disksPerSet int) (format *formatXLV3, err error) {
+	if err = checkAnyRootDisk(storageDisks); err != nil {
+		return nil, err
+	}
+
 	format = newFormatXLV3(setCount, disksPerSet)
 	formats := make([]*formatXLV3, len(storageDisks))
 
