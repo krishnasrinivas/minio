@@ -45,7 +45,7 @@ func main() {
 |:------------------------------------------|:--------------------------------------------|:-------------------|:----------------------------------|:------------------------|:--------------------------------------|:--------------------------------------------------|
 | [`ServiceStatus`](#ServiceStatus)         | [`ServerInfo`](#ServerInfo)                 | [`Heal`](#Heal)    | [`GetConfig`](#GetConfig)         | [`TopLocks`](#TopLocks) | [`AddUser`](#AddUser)                 |                                                   |
 | [`ServiceSendAction`](#ServiceSendAction) | [`ServerCPULoadInfo`](#ServerCPULoadInfo)   |                    | [`SetConfig`](#SetConfig)         |                         | [`SetUserPolicy`](#SetUserPolicy)     | [`StartProfiling`](#StartProfiling)               |
-|                                           | [`ServerMemUsageInfo`](#ServerMemUsageInfo) |                    | [`GetConfigKeys`](#GetConfigKeys) |                         | [`ListUsers`](#ListUsers)             | [`DownloadProfilingData`](#DownloadProfilingData) |
+| [`ListenTraceNotification`](#ListenTraceNotification)                                          | [`ServerMemUsageInfo`](#ServerMemUsageInfo) |                    | [`GetConfigKeys`](#GetConfigKeys) |                         | [`ListUsers`](#ListUsers)             | [`DownloadProfilingData`](#DownloadProfilingData) |
 |                                           |                                             |                    | [`SetConfigKeys`](#SetConfigKeys) |                         | [`AddCannedPolicy`](#AddCannedPolicy) |                                                   |
 
 
@@ -536,4 +536,21 @@ __Example__
     }
 
     log.Println("Profiling data successfully downloaded.")
+```
+
+<a name="ListenTraceNotification"></a>
+### ListenTraceNotification(doneCh <-chan struct{}) <-chan TraceInfo
+Download profiling data of all nodes in a zip format.
+
+__Example__
+
+``` go
+    doneCh := make(chan struct{})
+    defer close(doneCh)
+    // Start listening on all trace activity.
+    traceCh := madmClnt.ListenTraceNotification(doneCh)
+    for traceInfo := range traceCh {
+        fmt.Println(traceInfo.String())
+    }
+    log.Println("Success")
 ```

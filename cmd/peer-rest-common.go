@@ -37,6 +37,9 @@ const (
 	peerRESTMethodReloadFormat             = "reloadformat"
 	peerRESTMethodTargetExists             = "targetexists"
 	peerRESTMethodSendEvent                = "sendevent"
+	peerRESTMethodSendTrace                = "sendtrace"
+	peerRESTMethodAddTraceListener         = "addtracelistener"
+	peerRESTMethodRemoveTraceListener      = "removetracelistener"
 )
 
 const (

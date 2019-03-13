@@ -357,6 +357,8 @@ func serverMain(ctx *cli.Context) {
 	if err = globalPolicySys.Init(newObject); err != nil {
 		logger.Fatal(err, "Unable to initialize policy system")
 	}
+	// initialize pubsub system
+	globalTrace = NewTraceSys(context.Background(), globalEndpoints)
 
 	// Create new notification system.
 	globalNotificationSys = NewNotificationSys(globalServerConfig, globalEndpoints)

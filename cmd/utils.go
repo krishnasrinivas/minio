@@ -59,13 +59,10 @@ func IsErr(err error, errs ...error) bool {
 	return false
 }
 
-// Close Http tracing file.
+// stop sending HTTP trace to registered listeners.
 func stopHTTPTrace() {
-	if globalHTTPTraceFile != nil {
-		reqInfo := (&logger.ReqInfo{}).AppendTags("traceFile", globalHTTPTraceFile.Name())
-		ctx := logger.SetReqInfo(context.Background(), reqInfo)
-		logger.LogIf(ctx, globalHTTPTraceFile.Close())
-		globalHTTPTraceFile = nil
+	if globalTrace.HasTraceListeners() {
+		globalTrace.RemoveTraceListeners()
 	}
 }
 

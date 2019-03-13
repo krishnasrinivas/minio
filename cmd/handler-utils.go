@@ -326,18 +326,28 @@ func extractPostPolicyFormValues(ctx context.Context, form *multipart.Form) (fil
 
 // Log headers and body.
 func httpTraceAll(f http.HandlerFunc) http.HandlerFunc {
-	if globalHTTPTraceFile == nil {
-		return f
+	return func(w http.ResponseWriter, r *http.Request) {
+		if globalTrace == nil || !globalTrace.HasTraceListeners() {
+			f.ServeHTTP(w, r)
+			return
+		}
+		logNodeName := globalIsDistXL && !globalCLIContext.Anonymous
+		trace, _ := httptracer.Trace(f, true, logNodeName, w, r)
+		globalTrace.Publish(trace)
 	}
-	return httptracer.TraceReqHandlerFunc(f, globalHTTPTraceFile, true)
 }
 
 // Log only the headers.
 func httpTraceHdrs(f http.HandlerFunc) http.HandlerFunc {
-	if globalHTTPTraceFile == nil {
-		return f
+	return func(w http.ResponseWriter, r *http.Request) {
+		if globalTrace == nil || !globalTrace.HasTraceListeners() {
+			f.ServeHTTP(w, r)
+			return
+		}
+		logNodeName := globalIsDistXL && !globalCLIContext.Anonymous
+		trace, _ := httptracer.Trace(f, false, logNodeName, w, r)
+		globalTrace.Publish(trace)
 	}
-	return httptracer.TraceReqHandlerFunc(f, globalHTTPTraceFile, false)
 }
 
 // Returns "/bucketName/objectName" for path-style or virtual-host-style requests.

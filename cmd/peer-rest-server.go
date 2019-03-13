@@ -19,6 +19,7 @@ package cmd
 import (
 	"context"
 	"encoding/gob"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -31,6 +32,7 @@ import (
 	"github.com/minio/minio/pkg/event"
 	xnet "github.com/minio/minio/pkg/net"
 	"github.com/minio/minio/pkg/policy"
+	"github.com/minio/minio/pkg/trace"
 )
 
 // To abstract a node over network.
@@ -547,6 +549,87 @@ func (s *peerRESTServer) SignalServiceHandler(w http.ResponseWriter, r *http.Req
 	}
 }
 
+type sendTraceResp struct {
+	Success bool
+}
+
+// PeerTraceHandler - peer trace handler.
+func (s *peerRESTServer) TraceHandler(w http.ResponseWriter, r *http.Request) {
+	if !s.IsValid(w, r) {
+		return
+	}
+	var traceMsg trace.TraceInfo
+	if r.ContentLength < 0 {
+		s.writeErrorResponse(w, errInvalidArgument)
+		return
+	}
+	err := json.NewDecoder(r.Body).Decode(&traceMsg)
+	if err != nil {
+		s.writeErrorResponse(w, err)
+		return
+	}
+
+	globalTrace.traceListeners.Send(traceMsg)
+	var traceResp sendTraceResp
+	traceResp.Success = true
+
+	defer w.(http.Flusher).Flush()
+	logger.LogIf(context.Background(), gob.NewEncoder(w).Encode(&traceResp))
+}
+
+type traceListenerReq struct {
+	Addr xnet.Host `json:"addr"`
+}
+
+// AddTraceListenerHandler - handles request to increment
+// count of trace listener clients for that peer
+func (s *peerRESTServer) AddTraceListenerHandler(w http.ResponseWriter, r *http.Request) {
+	if !s.IsValid(w, r) {
+		return
+	}
+
+	var args traceListenerReq
+	if r.ContentLength <= 0 {
+		s.writeErrorResponse(w, errInvalidArgument)
+		return
+	}
+
+	err := gob.NewDecoder(r.Body).Decode(&args)
+	if err != nil {
+		s.writeErrorResponse(w, err)
+		return
+	}
+
+	restClient, err := newPeerRESTClient(&args.Addr)
+	if err != nil {
+		s.writeErrorResponse(w, fmt.Errorf("unable to find PeerRESTClient for provided address %v. This happens only if remote and this minio run with different set of endpoints", args.Addr))
+		return
+	}
+	globalTrace.AddPeerTraceListener(restClient)
+	w.(http.Flusher).Flush()
+}
+
+// RemoveTraceListenerHandler - handles request to decrement
+// count of trace listener clients for that peer
+func (s *peerRESTServer) RemoveTraceListenerHandler(w http.ResponseWriter, r *http.Request) {
+	if !s.IsValid(w, r) {
+		return
+	}
+
+	var args traceListenerReq
+	if r.ContentLength <= 0 {
+		s.writeErrorResponse(w, errInvalidArgument)
+		return
+	}
+
+	err := gob.NewDecoder(r.Body).Decode(&args)
+	if err != nil {
+		s.writeErrorResponse(w, err)
+		return
+	}
+	globalTrace.RemovePeerTraceListener(args.Addr.String())
+}
+
 func (s *peerRESTServer) writeErrorResponse(w http.ResponseWriter, err error) {
 	w.WriteHeader(http.StatusForbidden)
 	w.Write([]byte(err.Error()))
@@ -587,6 +670,10 @@ func registerPeerRESTHandlers(router *mux.Router) {
 	subrouter.Methods(http.MethodPost).Path("/" + peerRESTMethodBucketNotificationListen).HandlerFunc(httpTraceHdrs(server.ListenBucketNotificationHandler)).Queries(restQueries(peerRESTBucket)...)
 
 	subrouter.Methods(http.MethodPost).Path("/" + peerRESTMethodReloadFormat).HandlerFunc(httpTraceHdrs(server.ReloadFormatHandler)).Queries(restQueries(peerRESTDryRun)...)
+
+	subrouter.Methods(http.MethodPost).Path("/" + peerRESTMethodSendTrace).HandlerFunc(server.TraceHandler)
+	subrouter.Methods(http.MethodPost).Path("/" + peerRESTMethodAddTraceListener).HandlerFunc(server.AddTraceListenerHandler)
+	subrouter.Methods(http.MethodPost).Path("/" + peerRESTMethodRemoveTraceListener).HandlerFunc(server.RemoveTraceListenerHandler)
 
 	router.NotFoundHandler = http.HandlerFunc(httpTraceAll(notFoundHandler))
 }

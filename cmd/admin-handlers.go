@@ -43,6 +43,7 @@ import (
 	"github.com/minio/minio/pkg/mem"
 	xnet "github.com/minio/minio/pkg/net"
 	"github.com/minio/minio/pkg/quick"
+	"github.com/minio/minio/pkg/trace"
 )
 
 const (
@@ -1414,4 +1415,36 @@ func (a adminAPIHandlers) SetConfigKeysHandler(w http.ResponseWriter, r *http.Re
 
 	// Send success response
 	writeSuccessResponseHeadersOnly(w)
+}
+
+// TraceHandler - POST /minio/admin/v1/trace
+// ----------
+// The handler sends http trace to the connected HTTP client.
+func (a adminAPIHandlers) TraceHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := newContext(r, w, "HTTPTrace")
+	objectAPI := validateAdminReq(ctx, w, r)
+	if objectAPI == nil {
+		return
+	}
+
+	host, err := xnet.ParseHost(r.RemoteAddr)
+	if err != nil {
+		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
+		return
+	}
+
+	target, err := trace.NewHTTPClientTraceTarget(*host, w)
+	if err != nil {
+		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
+		return
+	}
+
+	if err = globalTrace.AddRemoteTraceTarget(ctx, target); err != nil {
+		logger.GetReqInfo(ctx).AppendTags("traceTarget", target.ID().Name)
+		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
+		return
+	}
+
+	defer globalTrace.RemoveRemoteTraceTarget(ctx, target.ID())
+	<-target.DoneCh
 }

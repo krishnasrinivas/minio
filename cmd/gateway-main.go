@@ -259,6 +259,9 @@ func StartGateway(ctx *cli.Context, gw Gateway) {
 	// Initialize policy system.
 	go globalPolicySys.Init(newObject)
 
+	// initialize pubsub system
+	globalTrace = NewTraceSys(context.Background(), globalEndpoints)
+
 	// Create new notification system.
 	globalNotificationSys = NewNotificationSys(globalServerConfig, globalEndpoints)
 	if globalEtcdClient != nil && newObject.IsNotificationSupported() {

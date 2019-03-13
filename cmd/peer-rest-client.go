@@ -21,6 +21,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/gob"
+	"encoding/json"
 	"io"
 	"net/url"
 
@@ -30,6 +31,7 @@ import (
 	"github.com/minio/minio/pkg/event"
 	xnet "github.com/minio/minio/pkg/net"
 	"github.com/minio/minio/pkg/policy"
+	"github.com/minio/minio/pkg/trace"
 )
 
 // client to talk to peer Nodes.
@@ -352,6 +354,74 @@ func (client *peerRESTClient) SignalService(sig serviceSignal) error {
 	values := make(url.Values)
 	values.Set(peerRESTSignal, string(sig))
 	respBody, err := client.call(peerRESTMethodSignalService, values, nil, -1)
+	if err != nil {
+		return err
+	}
+	defer http.DrainBody(respBody)
+	return nil
+}
+
+// SendTrace - send trace logs to peer node
+func (client *peerRESTClient) SendTrace(targetID string, msg trace.TraceInfo) error {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+
+	var reader bytes.Buffer
+	reader.Write(data)
+	respBody, err := client.call(peerRESTMethodSendTrace, nil, &reader, -1)
+	if err != nil {
+		return err
+	}
+
+	var traceResp sendTraceResp
+	err = gob.NewDecoder(respBody).Decode(&traceResp)
+	if err != nil || !traceResp.Success {
+		reqInfo := &logger.ReqInfo{}
+		reqInfo.AppendTags("targetID", targetID)
+		reqInfo.AppendTags("trace", msg.ReqInfo.Method)
+		ctx := logger.SetReqInfo(context.Background(), reqInfo)
+		logger.LogIf(ctx, err)
+	}
+	defer http.DrainBody(respBody)
+
+	return err
+}
+
+// AddTraceListener - informs peer to increment count of trace listeners
+// for this node
+func (client *peerRESTClient) AddTraceListener(addr xnet.Host) error {
+	args := traceListenerReq{
+		Addr: addr,
+	}
+
+	var reader bytes.Buffer
+	err := gob.NewEncoder(&reader).Encode(args)
+	if err != nil {
+		return err
+	}
+	respBody, err := client.call(peerRESTMethodAddTraceListener, nil, &reader, -1)
+	if err != nil {
+		return err
+	}
+	defer http.DrainBody(respBody)
+	return nil
+}
+
+// RemoveTraceListener -  informs peer to decrement count of trace listeners
+// for this node
+func (client *peerRESTClient) RemoveTraceListener(addr xnet.Host) error {
+	args := traceListenerReq{
+		Addr: addr,
+	}
+
+	var reader bytes.Buffer
+	err := gob.NewEncoder(&reader).Encode(args)
+	if err != nil {
+		return err
+	}
+	respBody, err := client.call(peerRESTMethodRemoveTraceListener, nil, &reader, -1)
 	if err != nil {
 		return err
 	}
