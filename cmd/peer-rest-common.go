@@ -37,11 +37,15 @@ const (
 	peerRESTMethodReloadFormat             = "reloadformat"
 	peerRESTMethodTargetExists             = "targetexists"
 	peerRESTMethodSendEvent                = "sendevent"
+	peerRESTMethodTrace                    = "trace"
+	peerRESTMethodUnsubscribeTrace         = "untrace"
 )
 
 const (
-	peerRESTBucket   = "bucket"
-	peerRESTSignal   = "signal"
-	peerRESTProfiler = "profiler"
-	peerRESTDryRun   = "dry-run"
+	peerRESTBucket        = "bucket"
+	peerRESTSignal        = "signal"
+	peerRESTProfiler      = "profiler"
+	peerRESTDryRun        = "dry-run"
+	peerRESTTraceAll      = "all"
+	peerRESTTraceTargetID = "target-id"
 )
