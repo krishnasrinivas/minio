@@ -24,6 +24,7 @@ import (
 	"io"
 
 	"github.com/minio/minio/cmd/logger"
+	"github.com/ncw/directio"
 )
 
 // Calculates bitrot in chunks and writes the hash into the stream.
@@ -102,7 +103,7 @@ type streamingBitrotReader struct {
 	currOffset int64
 	h          hash.Hash
 	shardSize  int64
-	hashBytes  []byte
+	buf        []byte
 }
 
 func (b *streamingBitrotReader) Close() error {
@@ -112,12 +113,15 @@ func (b *streamingBitrotReader) Close() error {
 	return b.rc.Close()
 }
 
-func (b *streamingBitrotReader) ReadAt(buf []byte, offset int64) (int, error) {
+func (b *streamingBitrotReader) BitrotReadAt(offset int64) ([]byte, error) {
 	var err error
 	if offset%b.shardSize != 0 {
 		// Offset should always be aligned to b.shardSize
 		logger.LogIf(context.Background(), errUnexpected)
-		return 0, errUnexpected
+		return nil, errUnexpected
+	}
+	if b.buf == nil {
+		b.buf = directio.AlignedBlock(b.h.Size() + int(b.shardSize))
 	}
 	if b.rc == nil {
 		// For the first ReadAt() call we need to open the stream for reading.
@@ -126,33 +130,31 @@ func (b *streamingBitrotReader) ReadAt(buf []byte, offset int64) (int, error) {
 		b.rc, err = b.disk.ReadFileStream(b.volume, b.filePath, streamOffset, b.tillOffset-streamOffset)
 		if err != nil {
 			logger.LogIf(context.Background(), err)
-			return 0, err
+			return nil, err
 		}
 	}
 	if offset != b.currOffset {
 		logger.LogIf(context.Background(), errUnexpected)
-		return 0, errUnexpected
+		return nil, errUnexpected
 	}
 	b.h.Reset()
-	_, err = io.ReadFull(b.rc, b.hashBytes)
+	n, err := b.rc.Read(b.buf)
+	if err == io.EOF || err == io.ErrUnexpectedEOF {
+		err = nil
+	}
 	if err != nil {
 		logger.LogIf(context.Background(), err)
-		return 0, err
+		return nil, err
 	}
-	_, err = io.ReadFull(b.rc, buf)
-	if err != nil {
-		logger.LogIf(context.Background(), err)
-		return 0, err
-	}
-	b.h.Write(buf)
+	b.h.Write(b.buf[b.h.Size():n])
 
-	if !bytes.Equal(b.h.Sum(nil), b.hashBytes) {
-		err = hashMismatchError{hex.EncodeToString(b.hashBytes), hex.EncodeToString(b.h.Sum(nil))}
+	if !bytes.Equal(b.h.Sum(nil), b.buf[:b.h.Size()]) {
+		err = hashMismatchError{hex.EncodeToString(b.buf[:b.h.Size()]), hex.EncodeToString(b.h.Sum(nil))}
 		logger.LogIf(context.Background(), err)
-		return 0, err
+		return nil, err
 	}
-	b.currOffset += int64(len(buf))
-	return len(buf), nil
+	b.currOffset += int64(n - b.h.Size())
+	return b.buf[b.h.Size():n], nil
 }
 
 // Returns streaming bitrot reader implementation.
@@ -167,6 +169,6 @@ func newStreamingBitrotReader(disk StorageAPI, volume, filePath string, tillOffs
 		0,
 		h,
 		shardSize,
-		make([]byte, h.Size()),
+		nil,
 	}
 }

@@ -171,17 +171,20 @@ const (
 	// Add new constants here.
 )
 
+var globalShardSize = 2 * 1024 * 1024
+
 // newXLMetaV1 - initializes new xlMetaV1, adds version, allocates a fresh erasure info.
 func newXLMetaV1(object string, dataBlocks, parityBlocks int) (xlMeta xlMetaV1) {
 	xlMeta = xlMetaV1{}
 	xlMeta.Version = xlMetaVersion
 	xlMeta.Format = xlMetaFormat
 	xlMeta.Minio.Release = ReleaseTag
+	blockSize := (globalShardSize - HighwayHash256S.New().Size()) * dataBlocks
 	xlMeta.Erasure = ErasureInfo{
 		Algorithm:    erasureAlgorithmKlauspost,
 		DataBlocks:   dataBlocks,
 		ParityBlocks: parityBlocks,
-		BlockSize:    blockSizeV1,
+		BlockSize:    int64(blockSize),
 		Distribution: hashOrder(object, dataBlocks+parityBlocks),
 	}
 	return xlMeta

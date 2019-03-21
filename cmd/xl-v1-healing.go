@@ -385,7 +385,7 @@ func healObject(ctx context.Context, storageDisks []StorageAPI, bucket string, o
 		partActualSize := latestMeta.Parts[partIndex].ActualSize
 		partNumber := latestMeta.Parts[partIndex].Number
 		tillOffset := erasure.ShardFileTillOffset(0, partSize, partSize)
-		readers := make([]io.ReaderAt, len(latestDisks))
+		readers := make([]BitrotReaderAt, len(latestDisks))
 		checksumAlgo := erasureInfo.GetChecksumInfo(partName).Algorithm
 		for i, disk := range latestDisks {
 			if disk == OfflineDisk {

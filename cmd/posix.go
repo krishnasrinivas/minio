@@ -37,6 +37,7 @@ import (
 	"github.com/minio/minio/cmd/logger"
 	"github.com/minio/minio/pkg/disk"
 	"github.com/minio/minio/pkg/mountinfo"
+	"github.com/ncw/directio"
 )
 
 const (
@@ -188,7 +189,7 @@ func newPosix(path string) (*posix, error) {
 		// 1MiB buffer pool for posix internal operations.
 		pool: sync.Pool{
 			New: func() interface{} {
-				b := make([]byte, readSizeV1)
+				b := directio.AlignedBlock(globalShardSize)
 				return &b
 			},
 		},
@@ -985,7 +986,8 @@ func (s *posix) ReadFileStream(volume, path string, offset, length int64) (io.Re
 	}
 
 	// Open the file for reading.
-	file, err := os.Open((filePath))
+	// file, err := os.Open((filePath))
+	file, err := os.OpenFile(filePath, os.O_RDONLY|syscall.O_DIRECT, 0666)
 	if err != nil {
 		switch {
 		case os.IsNotExist(err):
@@ -1015,10 +1017,41 @@ func (s *posix) ReadFileStream(volume, path string, offset, length int64) (io.Re
 	if _, err = file.Seek(offset, io.SeekStart); err != nil {
 		return nil, err
 	}
-	return struct {
-		io.Reader
-		io.Closer
-	}{Reader: io.LimitReader(file, length), Closer: file}, nil
+	return file, err
+	// r, w := io.Pipe()
+	// go func() {
+	// 	defer file.Close()
+	// 	bufp := s.pool.Get().(*[]byte)
+	// 	defer s.pool.Put(bufp)
+	// 	b := *bufp
+	// 	count := st.Size()
+	// 	for {
+	// 		n, err := file.Read(b)
+	// 		if err == io.EOF {
+	// 			w.Close()
+	// 			return
+	// 		}
+	// 		if err != nil {
+	// 			w.CloseWithError(err)
+	// 			return
+	// 		}
+	// 		_, err = w.Write(b[:n])
+	// 		if err != nil {
+	// 			w.CloseWithError(err)
+	// 			return
+	// 		}
+	// 		count -= int64(n)
+	// 		if count == 0 {
+	// 			w.Close()
+	// 			return
+	// 		}
+	// 	}
+	// }()
+	// return r, nil
+	// return struct {
+	// 	io.Reader
+	// 	io.Closer
+	// }{Reader: io.LimitReader(file, length), Closer: file}, nil
 }
 
 // CreateFile - creates the file.
@@ -1047,12 +1080,18 @@ func (s *posix) CreateFile(volume, path string, fileSize int64, r io.Reader) (er
 
 	// Create file if not found. Note that it is created with os.O_EXCL flag as the file
 	// always is supposed to be created in the tmp directory with a unique file name.
-	w, err := s.openFile(volume, path, os.O_CREATE|os.O_APPEND|os.O_WRONLY|os.O_EXCL)
+	w, err := s.openFile(volume, path, os.O_CREATE|os.O_APPEND|os.O_WRONLY|os.O_EXCL|syscall.O_DIRECT)
+	if err != nil {
+		return err
+	}
+
+	wappend, err := s.openFile(volume, path, os.O_WRONLY)
 	if err != nil {
 		return err
 	}
 
 	defer w.Close()
+	defer wappend.Close()
 
 	var e error
 	if fileSize > 0 {
@@ -1078,7 +1117,42 @@ func (s *posix) CreateFile(volume, path string, fileSize int64, r io.Reader) (er
 	bufp := s.pool.Get().(*[]byte)
 	defer s.pool.Put(bufp)
 
-	n, err := io.CopyBuffer(w, r, *bufp)
+	var count int
+	var n int64
+
+	for {
+		buf := *bufp
+		count, err = io.ReadFull(r, buf)
+		if err == io.EOF {
+			break
+		}
+		if err != nil && err != io.ErrUnexpectedEOF {
+			return err
+		}
+		if count == len(buf) {
+			_, err = w.Write(buf)
+			if err != nil {
+				return err
+			}
+			n += int64(count)
+			continue
+		}
+		buf = buf[:count]
+		alignedEnd := (count / directio.AlignSize) * directio.AlignSize
+		_, err = w.Write(buf[:alignedEnd])
+		if err != nil {
+			return err
+		}
+		w.Close()
+		wappend.Seek(0, 2)
+		_, err = wappend.Write(buf[alignedEnd:])
+		err = s.AppendFile(volume, path, buf[alignedEnd:])
+		if err != nil {
+			return err
+		}
+		n += int64(count)
+		break
+	}
 	if err != nil {
 		return err
 	}
@@ -1090,6 +1164,114 @@ func (s *posix) CreateFile(volume, path string, fileSize int64, r io.Reader) (er
 	}
 	return nil
 }
+
+// // CreateFile - creates the file.
+// func (s *posix) CreateFile(volume, path string, fileSize int64, r io.Reader) (err error) {
+// 	fmt.Println("CreateFile", path)
+// 	if fileSize < 0 {
+// 		return errInvalidArgument
+// 	}
+
+// 	defer func() {
+// 		if err == errFaultyDisk {
+// 			atomic.AddInt32(&s.ioErrCount, 1)
+// 		}
+// 	}()
+
+// 	if atomic.LoadInt32(&s.ioErrCount) > maxAllowedIOError {
+// 		return errFaultyDisk
+// 	}
+
+// 	// Validate if disk is indeed free.
+// 	if err = checkDiskFree(s.diskPath, fileSize); err != nil {
+// 		if isSysErrIO(err) {
+// 			return errFaultyDisk
+// 		}
+// 		return err
+// 	}
+
+// 	// Create file if not found. Note that it is created with os.O_EXCL flag as the file
+// 	// always is supposed to be created in the tmp directory with a unique file name.
+// 	w, err := s.openFile(volume, path, os.O_CREATE|syscall.O_DIRECT|os.O_WRONLY|os.O_EXCL)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	defer w.Close()
+
+// 	var e error
+// 	if fileSize > 0 {
+// 		// Allocate needed disk space to append data
+// 		e = Fallocate(int(w.Fd()), 0, fileSize)
+// 	}
+
+// 	// Ignore errors when Fallocate is not supported in the current system
+// 	if e != nil && !isSysErrNoSys(e) && !isSysErrOpNotSupported(e) {
+// 		switch {
+// 		case isSysErrNoSpace(e):
+// 			err = errDiskFull
+// 		case isSysErrIO(e):
+// 			err = errFaultyDisk
+// 		default:
+// 			// For errors: EBADF, EINTR, EINVAL, ENODEV, EPERM, ESPIPE  and ETXTBSY
+// 			// Appending was failed anyway, returns unexpected error
+// 			err = errUnexpected
+// 		}
+// 		return err
+// 	}
+
+// 	bufp := s.pool.Get().(*[]byte)
+// 	defer s.pool.Put(bufp)
+
+// 	// n, err := io.CopyBuffer(w, r, *bufp)
+// 	var count int
+// 	var n int64
+
+// 	for {
+// 		buf := *bufp
+// 		count, err = io.ReadFull(r, buf)
+// 		fmt.Println("ReadFull", path, count, err)
+// 		if err == io.EOF {
+// 			break
+// 		}
+// 		if err != nil && err != io.ErrUnexpectedEOF {
+// 			return err
+// 		}
+// 		if count == len(buf) {
+// 			_, err = w.Write(buf)
+// 			if err != nil {
+// 				return err
+// 			}
+// 			n += int64(count)
+// 			continue
+// 		}
+// 		buf = buf[:count]
+// 		alignedEnd := (count / directio.AlignSize) * directio.AlignSize
+// 		fmt.Println("write", alignedEnd)
+// 		_, err = w.Write(buf[:alignedEnd])
+// 		if err != nil {
+// 			return err
+// 		}
+// 		w.Close()
+// 		fmt.Println("append", len(buf[alignedEnd:]))
+// 		err = s.AppendFile(volume, path, buf[alignedEnd:])
+// 		if err != nil {
+// 			return err
+// 		}
+// 		n += int64(count)
+// 		break
+// 	}
+// 	// if err != nil {
+// 	// 	return err
+// 	// }
+// 	if n < fileSize {
+// 		return errLessData
+// 	}
+// 	if n > fileSize {
+// 		return errMoreData
+// 	}
+// 	return nil
+// }
 
 func (s *posix) WriteAll(volume, path string, buf []byte) (err error) {
 	defer func() {
@@ -1140,7 +1322,6 @@ func (s *posix) AppendFile(volume, path string, buf []byte) (err error) {
 	if err != nil {
 		return err
 	}
-
 	if _, err = w.Write(buf); err != nil {
 		return err
 	}

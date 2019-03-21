@@ -388,7 +388,7 @@ func (api objectAPIHandlers) GetObjectHandler(w http.ResponseWriter, r *http.Req
 	}
 
 	// Write object content to response body
-	if _, err = io.Copy(httpWriter, gr); err != nil {
+	if _, err = io.CopyBuffer(httpWriter, gr, make([]byte, 4*1024*1024)); err != nil {
 		if !httpWriter.HasWritten() && !statusCodeWritten { // write error response only if no data or headers has been written to client yet
 			writeErrorResponse(ctx, w, toAPIError(ctx, err), r.URL, guessIsBrowserReq(r))
 		}

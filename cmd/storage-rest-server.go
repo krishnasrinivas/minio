@@ -29,6 +29,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/minio/minio/cmd/logger"
+	"github.com/ncw/directio"
 )
 
 var errConnectionStale = errors.New("connection stale, REST client/server instance-id mismatch")
@@ -341,7 +342,7 @@ func (s *storageRESTServer) ReadFileStreamHandler(w http.ResponseWriter, r *http
 	defer rc.Close()
 	w.Header().Set("Content-Length", strconv.Itoa(length))
 
-	io.Copy(w, rc)
+	io.CopyBuffer(w, rc, directio.AlignedBlock(globalShardSize))
 	w.(http.Flusher).Flush()
 }
 

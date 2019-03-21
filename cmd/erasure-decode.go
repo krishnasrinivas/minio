@@ -26,23 +26,21 @@ import (
 
 // Reads in parallel from readers.
 type parallelReader struct {
-	readers       []io.ReaderAt
+	readers       []BitrotReaderAt
 	dataBlocks    int
 	offset        int64
 	shardSize     int64
 	shardFileSize int64
-	buf           [][]byte
 }
 
 // newParallelReader returns parallelReader.
-func newParallelReader(readers []io.ReaderAt, e Erasure, offset, totalLength int64) *parallelReader {
+func newParallelReader(readers []BitrotReaderAt, e Erasure, offset, totalLength int64) *parallelReader {
 	return &parallelReader{
 		readers,
 		e.dataBlocks,
 		(offset / e.blockSize) * e.ShardSize(),
 		e.ShardSize(),
 		e.ShardFileSize(totalLength),
-		make([][]byte, len(readers)),
 	}
 }
 
@@ -61,10 +59,6 @@ func (p *parallelReader) canDecode(buf [][]byte) bool {
 func (p *parallelReader) Read() ([][]byte, error) {
 	newBuf := make([][]byte, len(p.readers))
 	var newBufLK sync.RWMutex
-
-	if p.offset+p.shardSize > p.shardFileSize {
-		p.shardSize = p.shardFileSize - p.offset
-	}
 
 	readTriggerCh := make(chan bool, len(p.readers))
 	for i := 0; i < p.dataBlocks; i++ {
@@ -99,15 +93,7 @@ func (p *parallelReader) Read() ([][]byte, error) {
 				readTriggerCh <- true
 				return
 			}
-			if p.buf[i] == nil {
-				// Reading first time on this disk, hence the buffer needs to be allocated.
-				// Subsequent reads will re-use this buffer.
-				p.buf[i] = make([]byte, p.shardSize)
-			}
-			// For the last shard, the shardsize might be less than previous shard sizes.
-			// Hence the following statement ensures that the buffer size is reset to the right size.
-			p.buf[i] = p.buf[i][:p.shardSize]
-			_, err := disk.ReadAt(p.buf[i], p.offset)
+			buf, err := disk.BitrotReadAt(p.offset)
 			if err != nil {
 				p.readers[i] = nil
 				// Since ReadAt returned error, trigger another read.
@@ -115,7 +101,7 @@ func (p *parallelReader) Read() ([][]byte, error) {
 				return
 			}
 			newBufLK.Lock()
-			newBuf[i] = p.buf[i]
+			newBuf[i] = buf
 			newBufLK.Unlock()
 			// Since ReadAt returned success, there is no need to trigger another read.
 			readTriggerCh <- false
@@ -133,7 +119,7 @@ func (p *parallelReader) Read() ([][]byte, error) {
 }
 
 // Decode reads from readers, reconstructs data if needed and writes the data to the writer.
-func (e Erasure) Decode(ctx context.Context, writer io.Writer, readers []io.ReaderAt, offset, length, totalLength int64) error {
+func (e Erasure) Decode(ctx context.Context, writer io.Writer, readers []BitrotReaderAt, offset, length, totalLength int64) error {
 	if offset < 0 || length < 0 {
 		logger.LogIf(ctx, errInvalidArgument)
 		return errInvalidArgument

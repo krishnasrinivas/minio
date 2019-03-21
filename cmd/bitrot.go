@@ -93,6 +93,10 @@ func (a BitrotAlgorithm) String() string {
 	return name
 }
 
+type BitrotReaderAt interface {
+	BitrotReadAt(offset int64) ([]byte, error)
+}
+
 // NewBitrotVerifier returns a new BitrotVerifier implementing the given algorithm.
 func NewBitrotVerifier(algorithm BitrotAlgorithm, checksum []byte) *BitrotVerifier {
 	return &BitrotVerifier{algorithm, checksum}
@@ -123,15 +127,15 @@ func newBitrotWriter(disk StorageAPI, volume, filePath string, length int64, alg
 	return newWholeBitrotWriter(disk, volume, filePath, length, algo, shardSize)
 }
 
-func newBitrotReader(disk StorageAPI, bucket string, filePath string, tillOffset int64, algo BitrotAlgorithm, sum []byte, shardSize int64) io.ReaderAt {
+func newBitrotReader(disk StorageAPI, bucket string, filePath string, tillOffset int64, algo BitrotAlgorithm, sum []byte, shardSize int64) BitrotReaderAt {
 	if algo == HighwayHash256S {
 		return newStreamingBitrotReader(disk, bucket, filePath, tillOffset, algo, shardSize)
 	}
-	return newWholeBitrotReader(disk, bucket, filePath, algo, tillOffset, sum)
+	return newWholeBitrotReader(disk, bucket, filePath, algo, tillOffset, sum, shardSize)
 }
 
 // Close all the readers.
-func closeBitrotReaders(rs []io.ReaderAt) {
+func closeBitrotReaders(rs []BitrotReaderAt) {
 	for _, r := range rs {
 		if br, ok := r.(*streamingBitrotReader); ok {
 			br.Close()
@@ -166,22 +170,17 @@ func bitrotCheckFile(disk StorageAPI, volume string, filePath string, tillOffset
 	}
 	buf := make([]byte, shardSize)
 	r := newStreamingBitrotReader(disk, volume, filePath, tillOffset, algo, shardSize)
-	defer closeBitrotReaders([]io.ReaderAt{r})
+	defer closeBitrotReaders([]BitrotReaderAt{r})
 	var offset int64
 	for {
 		if offset == tillOffset {
 			break
 		}
-		var n int
-		tmpBuf := buf
-		if int64(len(tmpBuf)) > (tillOffset - offset) {
-			tmpBuf = tmpBuf[:(tillOffset - offset)]
-		}
-		n, err = r.ReadAt(tmpBuf, offset)
+		buf, err = r.BitrotReadAt(offset)
 		if err != nil {
 			return err
 		}
-		offset += int64(n)
+		offset += int64(len(buf))
 	}
 	return nil
 }

@@ -329,7 +329,7 @@ func (xl xlObjects) getObject(ctx context.Context, bucket, object string, startO
 
 		tillOffset := erasure.ShardFileTillOffset(partOffset, partLength, partSize)
 		// Get the checksums of the current part.
-		readers := make([]io.ReaderAt, len(onlineDisks))
+		readers := make([]BitrotReaderAt, len(onlineDisks))
 		for index, disk := range onlineDisks {
 			if disk == OfflineDisk {
 				continue

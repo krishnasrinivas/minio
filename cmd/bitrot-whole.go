@@ -69,41 +69,44 @@ func newWholeBitrotWriter(disk StorageAPI, volume, filePath string, length int64
 
 // Implementation to verify bitrot for the whole file.
 type wholeBitrotReader struct {
-	disk       StorageAPI
-	volume     string
-	filePath   string
-	verifier   *BitrotVerifier // Holds the bit-rot info
-	tillOffset int64           // Affects the length of data requested in disk.ReadFile depending on Read()'s offset
-	buf        []byte          // Holds bit-rot verified data
+	disk           StorageAPI
+	volume         string
+	filePath       string
+	verifier       *BitrotVerifier // Holds the bit-rot info
+	tillOffset     int64           // Affects the length of data requested in disk.ReadFile depending on Read()'s offset
+	shardSize      int64
+	bufStartOffset int64
+	buf            []byte // Holds bit-rot verified data
 }
 
-func (b *wholeBitrotReader) ReadAt(buf []byte, offset int64) (n int, err error) {
+func (b *wholeBitrotReader) BitrotReadAt(offset int64) (buf []byte, err error) {
 	if b.buf == nil {
 		b.buf = make([]byte, b.tillOffset-offset)
 		if _, err := b.disk.ReadFile(b.volume, b.filePath, offset, b.buf, b.verifier); err != nil {
 			ctx := context.Background()
 			logger.GetReqInfo(ctx).AppendTags("disk", b.disk.String())
 			logger.LogIf(ctx, err)
-			return 0, err
+			return nil, err
 		}
 	}
-	if len(b.buf) < len(buf) {
-		logger.LogIf(context.Background(), errLessData)
-		return 0, errLessData
+	bufStartOffset := b.bufStartOffset
+	bufEndOffset := bufStartOffset + b.shardSize
+	if bufEndOffset > int64(len(b.buf)) {
+		bufEndOffset = int64(len(b.buf))
 	}
-	n = copy(buf, b.buf)
-	b.buf = b.buf[n:]
-	return n, nil
+	b.bufStartOffset = bufEndOffset
+	return b.buf[bufStartOffset:bufEndOffset], nil
 }
 
 // Returns whole-file bitrot reader.
-func newWholeBitrotReader(disk StorageAPI, volume, filePath string, algo BitrotAlgorithm, tillOffset int64, sum []byte) *wholeBitrotReader {
+func newWholeBitrotReader(disk StorageAPI, volume, filePath string, algo BitrotAlgorithm, tillOffset int64, sum []byte, shardSize int64) *wholeBitrotReader {
 	return &wholeBitrotReader{
 		disk:       disk,
 		volume:     volume,
 		filePath:   filePath,
 		verifier:   &BitrotVerifier{algo, sum},
 		tillOffset: tillOffset,
+		shardSize:  shardSize,
 		buf:        nil,
 	}
 }
