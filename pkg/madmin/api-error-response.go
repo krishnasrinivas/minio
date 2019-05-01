@@ -17,7 +17,9 @@
 package madmin
 
 import (
+	"bytes"
 	"encoding/xml"
+	"io"
 	"net/http"
 )
 
@@ -96,6 +98,31 @@ func ToErrorResponse(err error) ErrorResponse {
 		return err
 	default:
 		return ErrorResponse{}
+	}
+}
+
+// xmlDecoder provide decoded value in xml.
+func xmlDecoder(body io.Reader, v interface{}) error {
+	d := xml.NewDecoder(body)
+	return d.Decode(v)
+}
+
+// RespBodyToErrResponse returns a new encoded ErrorResponse
+// structure as error
+func RespBodyToErrResponse(respBody []byte, respStatus string) error {
+	var errResp ErrorResponse
+	// Decode the json error
+	reader := bytes.NewBuffer((respBody))
+	if err := xmlDecoder(reader, &errResp); err == nil {
+		return errResp
+	}
+
+	if err := jsonDecoder(reader, &errResp); err == nil {
+		return errResp
+	}
+	return ErrorResponse{
+		Code:    respStatus,
+		Message: string(respBody),
 	}
 }
 

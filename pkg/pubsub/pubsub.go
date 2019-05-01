@@ -28,17 +28,14 @@ type PubSub struct {
 
 // process item to subscribers.
 func (ps *PubSub) process() {
-	for {
-		select {
-		case item := <-ps.pub:
-			ps.mutex.Lock()
-			for _, sub := range ps.subs {
-				go func(s chan interface{}) {
-					s <- item
-				}(sub)
-			}
-			ps.mutex.Unlock()
+	for item := range ps.pub {
+		ps.mutex.Lock()
+		for _, sub := range ps.subs {
+			go func(s chan interface{}) {
+				s <- item
+			}(sub)
 		}
+		ps.mutex.Unlock()
 	}
 }
 

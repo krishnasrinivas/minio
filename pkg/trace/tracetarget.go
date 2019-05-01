@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -42,7 +43,7 @@ func (tid TargetID) String() string {
 // Target - trace target interface
 type Target interface {
 	ID() TargetID
-	Send(TraceInfo) error
+	Send(Info) error
 	Close() error
 }
 
@@ -55,6 +56,7 @@ type HTTPClientTraceTarget struct {
 	stopCh    chan struct{}
 	isStopped uint32
 	isRunning uint32
+	traceAll  bool
 }
 
 func (target *HTTPClientTraceTarget) start() {
@@ -101,16 +103,23 @@ func (target *HTTPClientTraceTarget) start() {
 		}
 	}()
 }
+func (target *HTTPClientTraceTarget) omitTrace(ti Info) bool {
+	return !target.traceAll && strings.HasPrefix(ti.ReqInfo.URL.Path, "/minio")
+}
 
 // Send - sends trace to HTTP client.
-func (target *HTTPClientTraceTarget) Send(ti TraceInfo) error {
+func (target *HTTPClientTraceTarget) Send(ti Info) error {
 	if atomic.LoadUint32(&target.isRunning) != 0 {
 		return errors.New("closed http connection")
+	}
+	if target.omitTrace(ti) {
+		return nil
 	}
 	data, err := json.Marshal(ti)
 	if err != nil {
 		return err
 	}
+
 	data = append(data, byte('\n'))
 	select {
 	case target.traceCh <- data:
@@ -144,17 +153,18 @@ func getNewUUID() (string, error) {
 }
 
 // NewHTTPClientTraceTarget - creates new HTTP client target.
-func NewHTTPClientTraceTarget(host xnet.Host, w http.ResponseWriter) (*HTTPClientTraceTarget, error) {
+func NewHTTPClientTraceTarget(host xnet.Host, w http.ResponseWriter, traceAll bool) (*HTTPClientTraceTarget, error) {
 	uuid, err := getNewUUID()
 	if err != nil {
 		return nil, err
 	}
 	c := &HTTPClientTraceTarget{
-		id:      TargetID{ID: "httpclient" + "+" + uuid + "+" + host.Name, Name: host.Name + ":" + host.Port.String()},
-		w:       w,
-		traceCh: make(chan []byte),
-		DoneCh:  make(chan struct{}),
-		stopCh:  make(chan struct{}),
+		id:       TargetID{ID: "httpclient" + "+" + uuid + "+" + host.Name, Name: host.Name + ":" + host.Port.String()},
+		w:        w,
+		traceCh:  make(chan []byte),
+		DoneCh:   make(chan struct{}),
+		stopCh:   make(chan struct{}),
+		traceAll: traceAll,
 	}
 	c.start()
 	return c, nil

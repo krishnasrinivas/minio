@@ -558,7 +558,7 @@ func (s *peerRESTServer) TraceHandler(w http.ResponseWriter, r *http.Request) {
 	if !s.IsValid(w, r) {
 		return
 	}
-	var traceMsg trace.TraceInfo
+	var traceMsg trace.Info
 	if r.ContentLength < 0 {
 		s.writeErrorResponse(w, errInvalidArgument)
 		return

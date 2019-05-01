@@ -55,9 +55,7 @@ func TestMultiPubSub(t *testing.T) {
 	c1 := ps.Subscribe()
 	c2 := ps.Subscribe()
 	val := "hello"
-	val2 := "minio"
 	ps.Publish(val)
-	ps.Publish(val2)
 
 	msg1 := <-c1
 	msg2 := <-c2

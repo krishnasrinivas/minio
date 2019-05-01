@@ -27,8 +27,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/minio/minio/pkg/madmin"
 	xnet "github.com/minio/minio/pkg/net"
-	"github.com/minio/minio/pkg/trace"
+	trace "github.com/minio/minio/pkg/trace"
 )
 
 // recordRequest - records the first recLen bytes
@@ -118,17 +119,16 @@ func (r *recordResponseWriter) Body() []byte {
 }
 
 // Trace gets trace of http request
-func Trace(f http.HandlerFunc, logBody, logNodeName bool, w http.ResponseWriter, r *http.Request) (trace.TraceInfo, error) {
+func Trace(f http.HandlerFunc, logBody, logNodeName bool, w http.ResponseWriter, r *http.Request) (trace.Info, error) {
 
 	name := runtime.FuncForPC(reflect.ValueOf(f).Pointer()).Name()
 	name = strings.TrimPrefix(name, "github.com/minio/minio/cmd.")
 	bodyPlaceHolder := []byte("<BODY>")
-	const timeFormat = "2006-01-02 15:04:05 -0700"
 	var reqBodyRecorder *recordRequest
 
 	// Generate short random request ID
 	reqID := fmt.Sprintf("%f", float64(time.Now().UnixNano())/1e10)
-	t := trace.TraceInfo{FuncName: name, ReqID: reqID}
+	t := trace.Info{FuncName: name, ReqID: reqID}
 	reqBodyRecorder = &recordRequest{Reader: r.Body, logBody: logBody}
 	r.Body = ioutil.NopCloser(reqBodyRecorder)
 
@@ -168,6 +168,10 @@ func Trace(f http.HandlerFunc, logBody, logNodeName bool, w http.ResponseWriter,
 	bodyContents := respBodyRecorder.Body()
 	if bodyContents != nil {
 		rs.Body = fmt.Sprintln(string(bodyContents))
+		if rs.StatusCode != http.StatusOK {
+			err := madmin.RespBodyToErrResponse(bodyContents, http.StatusText(rs.StatusCode))
+			rs.ErrMsg = err.Error()
+		}
 	} else {
 		if !logBody {
 			// If there was no error response and body logging is disabled

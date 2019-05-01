@@ -362,7 +362,7 @@ func (client *peerRESTClient) SignalService(sig serviceSignal) error {
 }
 
 // SendTrace - send trace logs to peer node
-func (client *peerRESTClient) SendTrace(targetID string, msg trace.TraceInfo) error {
+func (client *peerRESTClient) SendTrace(targetID string, msg trace.Info) error {
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return err

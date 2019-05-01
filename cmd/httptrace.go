@@ -66,7 +66,7 @@ func NewTraceSys(ctx context.Context, endpoints EndpointList) *HTTPTraceSys {
 		go func(client *peerRESTClient, ch chan interface{}) {
 			for {
 				msg := <-ch
-				if err := client.SendTrace(client.host.Name, msg.(trace.TraceInfo)); err != nil {
+				if err := client.SendTrace(client.host.Name, msg.(trace.Info)); err != nil {
 					logger.GetReqInfo(ctx).AppendTags("remotePeer", client.host.Name)
 					logger.LogIf(ctx, err)
 				}
@@ -85,7 +85,7 @@ func NewTraceSys(ctx context.Context, endpoints EndpointList) *HTTPTraceSys {
 	go func(pss *HTTPTraceSys, ch chan interface{}) {
 		for {
 			msg := <-ch
-			pss.traceListeners.Send(msg.(trace.TraceInfo))
+			pss.traceListeners.Send(msg.(trace.Info))
 		}
 	}(pss, ch)
 
@@ -178,6 +178,6 @@ func (sys *HTTPTraceSys) HasPeerListeners() bool {
 }
 
 // Publish - publishes trace message to the http trace pubsub system
-func (sys *HTTPTraceSys) Publish(traceMsg trace.TraceInfo) {
+func (sys *HTTPTraceSys) Publish(traceMsg trace.Info) {
 	sys.pubsub.Publish(traceMsg)
 }

@@ -22,16 +22,18 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 
 	trc "github.com/minio/minio/pkg/trace"
 )
 
 // ListenTraceNotification - listen on http trace notifications.
-func (c AdminClient) ListenTraceNotification(doneCh <-chan struct{}) <-chan trc.TraceInfo {
+func (adm AdminClient) ListenTraceNotification(allTrace bool, doneCh <-chan struct{}) <-chan trc.Info {
 
-	traceInfoCh := make(chan trc.TraceInfo, 1)
+	traceInfoCh := make(chan trc.Info, 1)
 	// Only success, start a routine to start reading line by line.
-	go func(traceInfoCh chan<- trc.TraceInfo) {
+	go func(traceInfoCh chan<- trc.Info) {
 		defer close(traceInfoCh)
 		// Continuously run and listen on bucket notification.
 		// Create a done channel to control 'ListObjects' go routine.
@@ -41,17 +43,19 @@ func (c AdminClient) ListenTraceNotification(doneCh <-chan struct{}) <-chan trc.
 		defer close(retryDoneCh)
 
 		for {
+			urlValues := make(url.Values)
+			urlValues.Set("all", strconv.FormatBool(allTrace))
 			reqData := requestData{
-				relPath: "/v1/trace",
+				relPath:     "/v1/trace",
+				queryValues: urlValues,
 			}
-
 			// Execute GET to call trace handler
-			resp, err := c.executeMethod("GET", reqData)
+			resp, err := adm.executeMethod("GET", reqData)
 			if err != nil {
 				return
 			}
 			if resp.StatusCode != http.StatusOK {
-				traceInfoCh <- trc.TraceInfo{Err: httpRespToErrorResponse(resp)} // errors.New(resp.Status)}
+				traceInfoCh <- trc.Info{Err: httpRespToErrorResponse(resp)}
 				return
 			}
 			// Initialize a new bufio scanner, to read line by line.
@@ -60,9 +64,9 @@ func (c AdminClient) ListenTraceNotification(doneCh <-chan struct{}) <-chan trc.
 			// Close the response body.
 			defer resp.Body.Close()
 
-			// Unmarshal each line, returns marshalled values.
+			// Unmarshal each line, returns marshaled values.
 			for bio.Scan() {
-				var traceInfo trc.TraceInfo
+				var traceInfo trc.Info
 				if err = json.Unmarshal(bio.Bytes(), &traceInfo); err != nil {
 					continue
 				}

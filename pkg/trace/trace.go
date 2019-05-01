@@ -25,9 +25,9 @@ import (
 	"time"
 )
 
-// TraceInfo - represents a trace record, additionally
+// Info - represents a trace record, additionally
 // also reports errors if any while listening on trace.
-type TraceInfo struct {
+type Info struct {
 	NodeName string
 	FuncName string
 	ReqID    string
@@ -52,6 +52,7 @@ type ResponseInfo struct {
 	Headers    map[string]string
 	Body       string
 	StatusCode int
+	ErrMsg     string
 }
 
 // TargetIDErr returns error associated for a targetID
@@ -62,8 +63,8 @@ type TargetIDErr struct {
 	Err error
 }
 
-func (ti TraceInfo) String() string {
-	const timeFormat = "2006-01-02 15:04:05 -0700"
+func (ti Info) String() string {
+	const timeFormat = "2006-01-02 15:04:05.000000000"
 	ri := ti.ReqInfo
 	rs := ti.RespInfo
 	var s strings.Builder
@@ -78,7 +79,7 @@ func (ti TraceInfo) String() string {
 		s.WriteString(fmt.Sprintf("%s: %s\n", k, v))
 	}
 	s.WriteString(fmt.Sprintf("\n"))
-	s.WriteString(fmt.Sprintf("%s", ri.Body))
+	s.WriteString(ri.Body)
 	s.WriteString(fmt.Sprintf("\n"))
 	s.WriteString(fmt.Sprintf("[RESPONSE] "))
 	s.WriteString(fmt.Sprintf("[%s] [%s]\n", ti.ReqID, rs.Time.Format(timeFormat)))
@@ -134,7 +135,7 @@ func (t *Listeners) List() []TargetID {
 }
 
 // SendTraceByID - sends events to targets identified by target IDs.
-func (t *Listeners) SendTraceByID(ti TraceInfo, targetIDs ...TargetID) <-chan TargetIDErr {
+func (t *Listeners) SendTraceByID(ti Info, targetIDs ...TargetID) <-chan TargetIDErr {
 	errCh := make(chan TargetIDErr)
 
 	go func() {
@@ -199,7 +200,7 @@ func (t *Listeners) RemoveListener(targetID TargetID) {
 }
 
 // Send - sends event data to all matching targets.
-func (t *Listeners) Send(trace TraceInfo) (errs []TargetIDErr) {
+func (t *Listeners) Send(trace Info) (errs []TargetIDErr) {
 	errCh := t.SendTraceByID(trace, t.List()...)
 	for terr := range errCh {
 		errs = append(errs, terr)

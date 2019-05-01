@@ -547,8 +547,10 @@ __Example__
 ``` go
     doneCh := make(chan struct{})
     defer close(doneCh)
+    // listen to all trace including internal API calls
+    allTrace := true
     // Start listening on all trace activity.
-    traceCh := madmClnt.ListenTraceNotification(doneCh)
+    traceCh := madmClnt.ListenTraceNotification(allTrace,doneCh)
     for traceInfo := range traceCh {
         fmt.Println(traceInfo.String())
     }

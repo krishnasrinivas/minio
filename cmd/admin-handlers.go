@@ -1422,6 +1422,10 @@ func (a adminAPIHandlers) SetConfigKeysHandler(w http.ResponseWriter, r *http.Re
 // The handler sends http trace to the connected HTTP client.
 func (a adminAPIHandlers) TraceHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := newContext(r, w, "HTTPTrace")
+	all := false
+	if a := r.URL.Query().Get("all"); a != "false" {
+		all = true
+	}
 	objectAPI := validateAdminReq(ctx, w, r)
 	if objectAPI == nil {
 		return
@@ -1433,7 +1437,7 @@ func (a adminAPIHandlers) TraceHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	target, err := trace.NewHTTPClientTraceTarget(*host, w)
+	target, err := trace.NewHTTPClientTraceTarget(*host, w, all)
 	if err != nil {
 		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
 		return
