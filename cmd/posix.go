@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -81,6 +82,8 @@ type posix struct {
 	diskFileInfo os.FileInfo
 	// Disk usage metrics
 	stopUsageCh chan struct{}
+
+	writePermission chan struct{}
 }
 
 // checkPathLength - returns error if given path name length more than 255
@@ -177,6 +180,19 @@ func isDirEmpty(dirname string) bool {
 	return true
 }
 
+var posixThreads = func() int {
+	threadsStr := os.Getenv("MINIO_POSIX_THREADS")
+	if threadsStr == "" {
+		return 4
+	}
+	t, err := strconv.Atoi(threadsStr)
+	if err != nil {
+		logger.LogIf(context.Background(), err)
+		return 4
+	}
+	return t
+}()
+
 // Initialize a new storage disk.
 func newPosix(path string) (*posix, error) {
 	var err error
@@ -197,9 +213,14 @@ func newPosix(path string) (*posix, error) {
 				return &b
 			},
 		},
-		stopUsageCh:  make(chan struct{}),
-		diskFileInfo: fi,
-		diskMount:    mountinfo.IsLikelyMountPoint(path),
+		stopUsageCh:     make(chan struct{}),
+		diskFileInfo:    fi,
+		diskMount:       mountinfo.IsLikelyMountPoint(path),
+		writePermission: make(chan struct{}, posixThreads),
+	}
+
+	for i := 0; i < posixThreads; i++ {
+		p.writePermission <- struct{}{}
 	}
 
 	if !p.diskMount {
@@ -1182,8 +1203,12 @@ func (s *posix) CreateFile(volume, path string, fileSize int64, r io.Reader) (er
 			return err
 		}
 	}
-	defer w.Sync() // Sync before close.
-	defer w.Close()
+	defer func() {
+		perm := <-s.writePermission
+		w.Sync() // Sync before close.
+		s.writePermission <- perm
+		w.Close()
+	}()
 
 	var e error
 	if fileSize > 0 {
@@ -1247,13 +1272,17 @@ func (s *posix) CreateFile(volume, path string, fileSize int64, r io.Reader) (er
 		n, err = io.ReadFull(r, buf)
 		switch err {
 		case nil:
+			perm := <-s.writePermission
 			n, err = w.Write(buf)
+			s.writePermission <- perm
 			if err != nil {
 				return err
 			}
 			written += n
 		case io.ErrUnexpectedEOF:
+			perm := <-s.writePermission
 			n, err = writeRemaining(w, buf[:n])
+			s.writePermission <- perm
 			if err != nil {
 				return err
 			}
