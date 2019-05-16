@@ -43,14 +43,27 @@ import (
 )
 
 const (
-	diskMinFreeSpace    = 900 * humanize.MiByte // Min 900MiB free space.
-	diskMinTotalSpace   = diskMinFreeSpace      // Min 900MiB total space.
-	maxAllowedIOError   = 5
-	posixWriteBlockSize = 4 * humanize.MiByte
+	diskMinFreeSpace  = 900 * humanize.MiByte // Min 900MiB free space.
+	diskMinTotalSpace = diskMinFreeSpace      // Min 900MiB total space.
+	maxAllowedIOError = 5
+	// posixWriteBlockSize = 16 * humanize.MiByte
 	// DirectIO alignment needs to be 4K. Defined here as
 	// directio.AlignSize is defined as 0 in MacOS causing divide by 0 error.
 	directioAlignSize = 4096
 )
+
+var posixWriteBlockSize = func() int {
+	sizeStr := os.Getenv("MINIO_POSIX_BLOCK_SIZE")
+	if sizeStr == "" {
+		return 4 * humanize.MiByte
+	}
+	size, err := strconv.Atoi(sizeStr)
+	if err != nil {
+		logger.LogIf(context.Background(), err)
+		return 4 * humanize.MiByte
+	}
+	return size * humanize.MiByte
+}()
 
 // isValidVolname verifies a volname name in accordance with object
 // layer requirements.
