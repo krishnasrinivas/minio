@@ -429,6 +429,26 @@ func (client *peerRESTClient) RemoveTraceListener(addr xnet.Host) error {
 	return nil
 }
 
+func (client *peerRESTClient) Trace(doneCh chan struct{}) (chan trace.Info, error) {
+	ch := make(chan trace.Info)
+	go func() {
+		respBody, err := client.call()
+		for {
+			entry, err := getEntry(respBody)
+			if err != nil {
+				client.call()
+				continue
+			}
+			select {
+			case <-doneCh:
+				return
+			case ch <- entry:
+			}
+		}
+	}()
+	return ch
+}
+
 func getRemoteHosts(endpoints EndpointList) []*xnet.Host {
 	var remoteHosts []*xnet.Host
 	for _, hostStr := range GetRemotePeers(endpoints) {

@@ -630,6 +630,17 @@ func (s *peerRESTServer) RemoveTraceListenerHandler(w http.ResponseWriter, r *ht
 	globalTrace.RemovePeerTraceListener(args.Addr.String())
 }
 
+func (s *peerRESTServer) TraceHandler(w http.ResponseWriter, r *http.Request) {
+	ch := globalTrace.pubsub.Subscribe()
+	for entry := range ch {
+		err := w.Write(entry)
+		if err != nil {
+			globalTrace.pubsub.Unsubscribe(ch)
+			return
+		}
+	}
+}
+
 func (s *peerRESTServer) writeErrorResponse(w http.ResponseWriter, err error) {
 	w.WriteHeader(http.StatusForbidden)
 	w.Write([]byte(err.Error()))

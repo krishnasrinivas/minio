@@ -64,6 +64,12 @@ func (ps *PubSub) Unsubscribe(ch chan interface{}) {
 	}
 }
 
+func (ps *PubSub) HasSubscribers() bool {
+	ps.mutex.Lock()
+	defer ps.mutex.Unlock()
+	return len(ps.subs) > 0
+}
+
 // New inits a PubSub system
 func New() *PubSub {
 	ps := &PubSub{}
