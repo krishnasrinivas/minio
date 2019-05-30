@@ -1,7 +1,7 @@
 // +build ignore
 
 /*
- * MinIO Cloud Storage, (C) 2019 MinIO, Inc.
+ * MinIO Cloud Storage, (C) 2017 MinIO, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,27 +17,30 @@
  *
  */
 
- package main
+package main
 
- import (
-	 "log"
-	"fmt"
-	 "github.com/minio/minio/pkg/madmin"
- )
- 
- func main() {
-	 // Note: YOUR-ACCESSKEYID, YOUR-SECRETACCESSKEY are
-	 // dummy values, please replace them with original values.
- 
-	 // API requests are secure (HTTPS) if secure=true and insecure (HTTPS) otherwise.
-	 // New returns an MinIO Admin client object.
-	 madmClnt, err := madmin.New("your-minio.example.com:9000", "YOUR-ACCESSKEYID", "YOUR-SECRETACCESSKEY", true)
-	 if err != nil {
-		 log.Fatalln(err)
-	 }
-	 doneCh := make(chan struct{})
-	 defer close(doneCh)
- 
+import (
+	"log"
+
+	"github.com/minio/minio/pkg/madmin"
+)
+
+func main() {
+	// Note: YOUR-ACCESSKEYID, YOUR-SECRETACCESSKEY are
+	// dummy values, please replace them with original values.
+
+	// Note: YOUR-ACCESSKEYID, YOUR-SECRETACCESSKEY are
+	// dummy values, please replace them with original values.
+
+	// API requests are secure (HTTPS) if secure=true and insecure (HTTPS) otherwise.
+	// New returns an MinIO Admin client object.
+	madmClnt, err := madmin.New("your-minio.example.com:9000", "YOUR-ACCESSKEYID", "YOUR-SECRETACCESSKEY", true)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	doneCh := make(chan struct{})
+	defer close(doneCh)
+
 	// Start listening on all trace activity.
 	traceCh := madmClnt.ListenTrace(false, doneCh)
 	for traceInfo := range traceCh {
@@ -45,7 +48,5 @@
 			fmt.Println(traceInfo.Err)
 		}
 		fmt.Println(traceInfo)
-	} 
-
- }
-
+	}
+}

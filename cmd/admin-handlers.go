@@ -1433,11 +1433,8 @@ func (a adminAPIHandlers) TraceHandler(w http.ResponseWriter, r *http.Request) {
 	traceCh := make(chan trace.Info)
 	doneCh := make(chan struct{})
 	defer close(doneCh)
-	targetID := mustGetUUID()
 
-	globalTrace.Trace(targetID, traceCh, doneCh, trcAll)
-	defer globalTrace.Unsubscribe(targetID)
-	defer globalTrace.UnsubscribePeers(targetID)
+	globalTrace.Trace(traceCh, doneCh, trcAll)
 
 	for entry := range traceCh {
 		data, err := json.Marshal(entry)

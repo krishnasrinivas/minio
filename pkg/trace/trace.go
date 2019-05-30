@@ -18,20 +18,8 @@ package trace
 
 import (
 	"net/http"
-	"net/url"
 	"time"
 )
-
-// Short trace record
-type Short struct {
-	NodeName   string
-	Time       time.Time
-	FuncName   string
-	Host       string
-	URL        url.URL
-	StatusCode int
-	StatusMsg  string
-}
 
 // Info - represents a trace record, additionally
 // also reports errors if any while listening on trace.
@@ -49,14 +37,12 @@ type RecordSet struct {
 
 // RequestInfo represents trace of http request
 type RequestInfo struct {
-	Time     time.Time `json:"time"`
-	Method   string    `json:"method"`
-	Path     string    `json:"path,omitempty"`
-	RawQuery string    `json:"rawquery,omitempty"`
-	// Host     string
-	URL     url.URL     `json:"url,omitempty"`
-	Headers http.Header `json:"headers,omitempty"`
-	Body    []byte      `json:"body,omitempty"`
+	Time     time.Time   `json:"time"`
+	Method   string      `json:"method"`
+	Path     string      `json:"path,omitempty"`
+	RawQuery string      `json:"rawquery,omitempty"`
+	Headers  http.Header `json:"headers,omitempty"`
+	Body     []byte      `json:"body,omitempty"`
 }
 
 // ResponseInfo represents trace of http request

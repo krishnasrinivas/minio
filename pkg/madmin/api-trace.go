@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 
 	trc "github.com/minio/minio/pkg/trace"
 )
@@ -32,6 +33,17 @@ import (
 type TraceInfo struct {
 	Trc trc.Info
 	Err error
+}
+
+// Short trace record
+type Short struct {
+	NodeName   string
+	Time       time.Time
+	FuncName   string
+	Host       string
+	URL        url.URL
+	StatusCode int
+	StatusMsg  string
 }
 
 // ListenTrace - listen on http trace notifications.

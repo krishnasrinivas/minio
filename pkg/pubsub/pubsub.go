@@ -17,7 +17,6 @@ package pubsub
 
 import (
 	"sync"
-	"sync/atomic"
 )
 
 //PubSub holds publishers and subscribers
@@ -25,13 +24,7 @@ type PubSub struct {
 	subs  []chan interface{}
 	pub   chan interface{}
 	mutex sync.Mutex
-	count int64
-	buf   []interface{}
 }
-
-var (
-	bufferCount = 1
-)
 
 // process item to subscribers.
 func (ps *PubSub) process() {
@@ -48,18 +41,7 @@ func (ps *PubSub) process() {
 
 // Publish message to pubsub system
 func (ps *PubSub) Publish(item interface{}) {
-	count := int(atomic.AddInt64(&ps.count, 1))
-	if count > bufferCount {
-		// reset count
-		atomic.StoreInt64(&ps.count, 0)
-		for _, msg := range ps.buf {
-			ps.pub <- msg
-		}
-	}
-	if count <= bufferCount {
-		idx := count % bufferCount
-		ps.buf[idx] = item
-	}
+	ps.pub <- item
 }
 
 // Subscribe - Adds a subscriber to pubsub system
@@ -77,22 +59,16 @@ func (ps *PubSub) Unsubscribe(ch chan interface{}) {
 	defer ps.mutex.Unlock()
 	for i, sub := range ps.subs {
 		if sub == ch {
+			close(ch)
 			ps.subs = append(ps.subs[:i], ps.subs[i+1:]...)
 		}
 	}
 }
 
-// UnsubscribeAll removes all subscribers
-func (ps *PubSub) UnsubscribeAll() {
-	ps.mutex.Lock()
-	defer ps.mutex.Unlock()
-	for _, sub := range ps.subs {
-		close(sub)
-	}
-}
-
 // HasSubscribers returns true if pubsub system has subscribers
 func (ps *PubSub) HasSubscribers() bool {
+	ps.mutex.Lock()
+	defer ps.mutex.Unlock()
 	return len(ps.subs) > 0
 }
 
@@ -100,7 +76,6 @@ func (ps *PubSub) HasSubscribers() bool {
 func New() *PubSub {
 	ps := &PubSub{}
 	ps.pub = make(chan interface{})
-	ps.buf = make([]interface{}, bufferCount)
 	go ps.process()
 	return ps
 }

@@ -264,7 +264,7 @@ func StartGateway(ctx *cli.Context, gw Gateway) {
 	// Initialize policy system.
 	go globalPolicySys.Init(newObject)
 
-	// initialize pubsub system
+	// initialize globalTrace system
 	globalTrace = NewTraceSys(context.Background(), globalEndpoints)
 
 	// Create new notification system.
