@@ -375,22 +375,34 @@ func (client *peerRESTClient) SignalService(sig serviceSignal) error {
 func (client *peerRESTClient) Trace(doneCh chan struct{}, trcAll bool) (chan trace.Info, error) {
 	ch := make(chan trace.Info)
 	go func() {
+		var ctx context.Context
+		var cancel context.CancelFunc
+		var respBody io.ReadCloser
+		var err error
+
+		defer func() {
+			close(ch)
+			if cancel != nil {
+				cancel()
+			}
+			http.DrainBody(respBody)
+		}()
+
 		for {
 			values := make(url.Values)
 			values.Set(peerRESTTraceAll, strconv.FormatBool(trcAll))
 			// get cancellation context to properly unsubscribe peers
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel = context.WithCancel(context.Background())
 
-			respBody, err := client.callWithContext(ctx, peerRESTMethodTrace, values, nil, -1)
+			respBody, err = client.callWithContext(ctx, peerRESTMethodTrace, values, nil, -1)
 
 			if err != nil {
-				//retry
+				// Retry after 5 seconds.
 				time.Sleep(5 * time.Second)
 				select {
+				case <-GlobalServiceDoneCh:
+					return
 				case <-doneCh:
-					// Close the response body.
-					http.DrainBody(respBody)
-					cancel()
 					return
 				default:
 				}
@@ -405,10 +417,11 @@ func (client *peerRESTClient) Trace(doneCh chan struct{}, trcAll bool) (chan tra
 					continue
 				}
 				select {
-				case <-doneCh:
-					cancel() // cancel context
-					return
 				case ch <- traceRec:
+				case <-GlobalServiceDoneCh:
+					return
+				case <-doneCh:
+					return
 				}
 			}
 			http.DrainBody(respBody)

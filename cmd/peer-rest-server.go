@@ -562,28 +562,23 @@ func (s *peerRESTServer) TraceHandler(w http.ResponseWriter, r *http.Request) {
 	ch := globalTrace.pubsub.Subscribe()
 	defer globalTrace.pubsub.Unsubscribe(ch)
 
-	for {
-		select {
-		case <-GlobalServiceDoneCh:
-			return
-		case entry := <-ch:
-			trcInfo := entry.(trace.Info)
-			// omit inter-node traffic if trcAll is false
-			if !trcAll && strings.HasPrefix(trcInfo.ReqInfo.Path, "/minio") {
-				continue
-			}
-			data, err := json.Marshal(trcInfo)
-			if err != nil {
-				return
-			}
-			if _, err = w.Write(data); err != nil {
-				return
-			}
-			if _, err = w.Write([]byte("\n")); err != nil {
-				return
-			}
-			w.(http.Flusher).Flush()
+	for entry := range ch {
+		trcInfo := entry.(trace.Info)
+		// omit inter-node traffic if trcAll is false
+		if !trcAll && strings.HasPrefix(trcInfo.ReqInfo.Path, "/minio") {
+			continue
 		}
+		data, err := json.Marshal(trcInfo)
+		if err != nil {
+			return
+		}
+		if _, err = w.Write(data); err != nil {
+			return
+		}
+		if _, err = w.Write([]byte("\n")); err != nil {
+			return
+		}
+		w.(http.Flusher).Flush()
 	}
 }
 

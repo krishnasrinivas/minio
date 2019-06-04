@@ -43,7 +43,6 @@ import (
 	"github.com/minio/minio/pkg/mem"
 	xnet "github.com/minio/minio/pkg/net"
 	"github.com/minio/minio/pkg/quick"
-	trace "github.com/minio/minio/pkg/trace"
 )
 
 const (
@@ -1430,23 +1429,28 @@ func (a adminAPIHandlers) TraceHandler(w http.ResponseWriter, r *http.Request) {
 	if objectAPI == nil {
 		return
 	}
-	traceCh := make(chan trace.Info)
+
 	doneCh := make(chan struct{})
 	defer close(doneCh)
 
-	globalTrace.Trace(traceCh, doneCh, trcAll)
+	traceCh := globalTrace.Trace(doneCh, trcAll)
 
-	for entry := range traceCh {
-		data, err := json.Marshal(entry)
-		if err != nil {
-			writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
+	for {
+		select {
+		case entry := <-traceCh:
+			data, err := json.Marshal(entry)
+			if err != nil {
+				writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
+				return
+			}
+			data = append(data, byte('\n'))
+
+			if _, err := w.Write(data); err != nil {
+				return
+			}
+			w.(http.Flusher).Flush()
+		case <-r.Context().Done():
 			return
 		}
-		data = append(data, byte('\n'))
-
-		if _, err := w.Write(data); err != nil {
-			return
-		}
-		w.(http.Flusher).Flush()
 	}
 }

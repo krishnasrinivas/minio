@@ -19,6 +19,7 @@ package cmd
 import (
 	"context"
 	"strings"
+	"sync"
 
 	"github.com/minio/minio/cmd/logger"
 	"github.com/minio/minio/pkg/pubsub"
@@ -58,41 +59,51 @@ func (sys *HTTPTraceSys) Publish(traceMsg trace.Info) {
 }
 
 // Trace writes http trace to writer
-func (sys *HTTPTraceSys) Trace(traceCh chan trace.Info, doneCh chan struct{}, trcAll bool) {
+func (sys *HTTPTraceSys) Trace(doneCh chan struct{}, trcAll bool) chan trace.Info {
+	traceCh := make(chan trace.Info)
 	go func() {
-		ch := sys.pubsub.Subscribe()
-		for {
-			select {
-			case entry := <-ch:
-				trcInfo := entry.(trace.Info)
-				// skip tracing of inter-node traffic if trcAll is false
-				if !trcAll && strings.HasPrefix(trcInfo.ReqInfo.Path, "/minio") {
-					continue
-				}
-				traceCh <- trcInfo
-			case <-doneCh:
-			case <-GlobalServiceDoneCh:
-				sys.pubsub.Unsubscribe(ch)
-				return
-			}
-		}
-	}()
+		defer close(traceCh)
 
-	for _, peer := range sys.peers {
-		go func(peer *peerRESTClient) {
-			ch, err := peer.Trace(doneCh, trcAll)
-			if err != nil {
-				return
-			}
+		var wg = &sync.WaitGroup{}
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			ch := sys.pubsub.Subscribe()
+			defer sys.pubsub.Unsubscribe(ch)
+
 			for {
 				select {
 				case entry := <-ch:
-					traceCh <- entry
-				case <-doneCh:
+					trcInfo := entry.(trace.Info)
+					// skip tracing of inter-node traffic if trcAll is false
+					if !trcAll && strings.HasPrefix(trcInfo.ReqInfo.Path, "/minio") {
+						continue
+					}
+					traceCh <- trcInfo
 				case <-GlobalServiceDoneCh:
+					return
+				case <-doneCh:
 					return
 				}
 			}
-		}(peer)
-	}
+		}()
+
+		for _, peer := range sys.peers {
+			wg.Add(1)
+			go func(peer *peerRESTClient) {
+				defer wg.Done()
+				ch, err := peer.Trace(doneCh, trcAll)
+				if err != nil {
+					return
+				}
+				for entry := range ch {
+					traceCh <- entry
+				}
+			}(peer)
+		}
+		wg.Wait()
+	}()
+	return traceCh
 }
