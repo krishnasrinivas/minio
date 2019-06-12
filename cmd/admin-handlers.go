@@ -43,6 +43,7 @@ import (
 	"github.com/minio/minio/pkg/mem"
 	xnet "github.com/minio/minio/pkg/net"
 	"github.com/minio/minio/pkg/quick"
+	trace "github.com/minio/minio/pkg/trace"
 )
 
 const (
@@ -1438,14 +1439,33 @@ func (a adminAPIHandlers) TraceHandler(w http.ResponseWriter, r *http.Request) {
 	doneCh := make(chan struct{})
 	defer close(doneCh)
 
-	traceCh := globalTrace.Trace(doneCh, trcAll)
+	// Trace Publisher and peer-trace-client uses nonblocking send and hence does not wait for slow receivers.
+	// Use buffered channel to take care of burst sends or slow w.Write()
+	traceCh := make(chan interface{}, 4000)
+
+	filter := func(entry interface{}) bool {
+		if trcAll {
+			return true
+		}
+		trcInfo := entry.(trace.Info)
+		return !strings.HasPrefix(trcInfo.ReqInfo.Path, minioReservedBucketPath)
+	}
+	remoteHosts := getRemoteHosts(globalEndpoints)
+	peers, err := getRestClients(remoteHosts)
+	if err != nil {
+		return
+	}
+	globalHTTPTrace.Subscribe(traceCh, doneCh, filter)
+
+	for _, peer := range peers {
+		peer.Trace(traceCh, doneCh, trcAll)
+	}
+
+	enc := json.NewEncoder(w)
 	for {
 		select {
 		case entry := <-traceCh:
-			if _, err := w.Write(entry); err != nil {
-				return
-			}
-			if _, err := w.Write([]byte("\n")); err != nil {
+			if err := enc.Encode(entry); err != nil {
 				return
 			}
 			w.(http.Flusher).Flush()

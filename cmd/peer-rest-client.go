@@ -17,7 +17,6 @@
 package cmd
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -33,6 +32,7 @@ import (
 	"github.com/minio/minio/pkg/event"
 	xnet "github.com/minio/minio/pkg/net"
 	"github.com/minio/minio/pkg/policy"
+	trace "github.com/minio/minio/pkg/trace"
 )
 
 // client to talk to peer Nodes.
@@ -422,52 +422,59 @@ func (client *peerRESTClient) SignalService(sig serviceSignal) error {
 	return nil
 }
 
-// Trace - send http trace request to peer nodes
-func (client *peerRESTClient) Trace(doneCh chan struct{}, trcAll bool) (chan []byte, error) {
-	ch := make(chan []byte)
+func (client *peerRESTClient) doTrace(traceCh chan interface{}, doneCh chan struct{}, trcAll bool) {
+	values := make(url.Values)
+	values.Set(peerRESTTraceAll, strconv.FormatBool(trcAll))
+
+	// To cancel the REST request in case doneCh gets closed.
+	ctx, cancel := context.WithCancel(context.Background())
+
+	cancelCh := make(chan struct{})
+	defer close(cancelCh)
 	go func() {
-		cleanupFn := func(cancel context.CancelFunc, ch chan []byte, respBody io.ReadCloser) {
-			close(ch)
-			if cancel != nil {
-				cancel()
-			}
-			http.DrainBody(respBody)
+		select {
+		case <-doneCh:
+		case <-cancelCh:
+			// There was an error in the REST request.
 		}
+		cancel()
+	}()
+
+	respBody, err := client.callWithContext(ctx, peerRESTMethodTrace, values, nil, -1)
+	defer http.DrainBody(respBody)
+
+	if err != nil {
+		return
+	}
+
+	dec := gob.NewDecoder(respBody)
+	for {
+		var info trace.Info
+		if err = dec.Decode(&info); err != nil {
+			return
+		}
+		select {
+		case traceCh <- info:
+		default:
+			// Do not block on slow receivers.
+		}
+	}
+}
+
+// Trace - send http trace request to peer nodes
+func (client *peerRESTClient) Trace(traceCh chan interface{}, doneCh chan struct{}, trcAll bool) {
+	go func() {
 		for {
-			values := make(url.Values)
-			values.Set(peerRESTTraceAll, strconv.FormatBool(trcAll))
-			// get cancellation context to properly unsubscribe peers
-			ctx, cancel := context.WithCancel(context.Background())
-			respBody, err := client.callWithContext(ctx, peerRESTMethodTrace, values, nil, -1)
-			if err != nil {
-				//retry
-				time.Sleep(5 * time.Second)
-				select {
-				case <-doneCh:
-					cleanupFn(cancel, ch, respBody)
-					return
-				default:
-				}
-				continue
-			}
-			bio := bufio.NewScanner(respBody)
-			go func() {
-				<-doneCh
-				cancel()
-			}()
-			// Unmarshal each line, returns marshaled values.
-			for bio.Scan() {
-				ch <- bio.Bytes()
-			}
+			client.doTrace(traceCh, doneCh, trcAll)
 			select {
 			case <-doneCh:
-				cleanupFn(cancel, ch, respBody)
 				return
 			default:
+				// There was error in the REST request, retry after sometime as probably the peer is down.
+				time.Sleep(5 * time.Second)
 			}
 		}
 	}()
-	return ch, nil
 }
 
 func getRemoteHosts(endpoints EndpointList) []*xnet.Host {
