@@ -191,6 +191,8 @@ type ServerConnStats struct {
 	TotalInputBytes  uint64 `json:"transferred"`
 	TotalOutputBytes uint64 `json:"received"`
 	Throughput       uint64 `json:"throughput,omitempty"`
+	S3InputBytes     uint64 `json:"transferredS3"`
+	S3OutputBytes    uint64 `json:"receivedS3"`
 }
 
 // ServerHTTPMethodStats holds total number of HTTP operations from/to the server,
@@ -203,16 +205,18 @@ type ServerHTTPMethodStats struct {
 // ServerHTTPStats holds all type of http operations performed to/from the server
 // including their average execution time.
 type ServerHTTPStats struct {
-	TotalHEADStats     ServerHTTPMethodStats `json:"totalHEADs"`
-	SuccessHEADStats   ServerHTTPMethodStats `json:"successHEADs"`
-	TotalGETStats      ServerHTTPMethodStats `json:"totalGETs"`
-	SuccessGETStats    ServerHTTPMethodStats `json:"successGETs"`
-	TotalPUTStats      ServerHTTPMethodStats `json:"totalPUTs"`
-	SuccessPUTStats    ServerHTTPMethodStats `json:"successPUTs"`
-	TotalPOSTStats     ServerHTTPMethodStats `json:"totalPOSTs"`
-	SuccessPOSTStats   ServerHTTPMethodStats `json:"successPOSTs"`
-	TotalDELETEStats   ServerHTTPMethodStats `json:"totalDELETEs"`
-	SuccessDELETEStats ServerHTTPMethodStats `json:"successDELETEs"`
+	TotalHEADStats       ServerHTTPMethodStats `json:"totalHEADs"`
+	SuccessHEADStats     ServerHTTPMethodStats `json:"successHEADs"`
+	TotalGETStats        ServerHTTPMethodStats `json:"totalGETs"`
+	SuccessGETStats      ServerHTTPMethodStats `json:"successGETs"`
+	TotalPUTStats        ServerHTTPMethodStats `json:"totalPUTs"`
+	SuccessPUTStats      ServerHTTPMethodStats `json:"successPUTs"`
+	TotalPOSTStats       ServerHTTPMethodStats `json:"totalPOSTs"`
+	SuccessPOSTStats     ServerHTTPMethodStats `json:"successPOSTs"`
+	TotalDELETEStats     ServerHTTPMethodStats `json:"totalDELETEs"`
+	SuccessDELETEStats   ServerHTTPMethodStats `json:"successDELETEs"`
+	TotalS3REQUESTStats  uint64                `json:"totalS3REQUESTs"`
+	FailedS3REQUESTStats uint64                `json:"failedS3REQUESTs"`
 }
 
 // ServerInfoData holds storage, connections and other

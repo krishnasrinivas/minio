@@ -33,15 +33,13 @@ type acceptResult struct {
 
 // httpListener - HTTP listener capable of handling multiple server addresses.
 type httpListener struct {
-	mutex                  sync.Mutex         // to guard Close() method.
-	tcpListeners           []*net.TCPListener // underlaying TCP listeners.
-	acceptCh               chan acceptResult  // channel where all TCP listeners write accepted connection.
-	doneCh                 chan struct{}      // done channel for TCP listener goroutines.
-	tcpKeepAliveTimeout    time.Duration
-	readTimeout            time.Duration
-	writeTimeout           time.Duration
-	updateBytesReadFunc    func(int) // function to be called to update bytes read in Deadlineconn.
-	updateBytesWrittenFunc func(int) // function to be called to update bytes written in Deadlineconn.
+	mutex               sync.Mutex         // to guard Close() method.
+	tcpListeners        []*net.TCPListener // underlaying TCP listeners.
+	acceptCh            chan acceptResult  // channel where all TCP listeners write accepted connection.
+	doneCh              chan struct{}      // done channel for TCP listener goroutines.
+	tcpKeepAliveTimeout time.Duration
+	readTimeout         time.Duration
+	writeTimeout        time.Duration
 }
 
 // isRoutineNetErr returns true if error is due to a network timeout,
@@ -92,7 +90,7 @@ func (listener *httpListener) start() {
 		tcpConn.SetKeepAlivePeriod(listener.tcpKeepAliveTimeout)
 
 		deadlineConn := newDeadlineConn(tcpConn, listener.readTimeout,
-			listener.writeTimeout, listener.updateBytesReadFunc, listener.updateBytesWrittenFunc)
+			listener.writeTimeout)
 
 		send(acceptResult{deadlineConn, nil}, doneCh)
 	}
@@ -177,9 +175,7 @@ func (listener *httpListener) Addrs() (addrs []net.Addr) {
 func newHTTPListener(serverAddrs []string,
 	tcpKeepAliveTimeout time.Duration,
 	readTimeout time.Duration,
-	writeTimeout time.Duration,
-	updateBytesReadFunc func(int),
-	updateBytesWrittenFunc func(int)) (listener *httpListener, err error) {
+	writeTimeout time.Duration) (listener *httpListener, err error) {
 
 	var tcpListeners []*net.TCPListener
 
@@ -212,12 +208,10 @@ func newHTTPListener(serverAddrs []string,
 	}
 
 	listener = &httpListener{
-		tcpListeners:           tcpListeners,
-		tcpKeepAliveTimeout:    tcpKeepAliveTimeout,
-		readTimeout:            readTimeout,
-		writeTimeout:           writeTimeout,
-		updateBytesReadFunc:    updateBytesReadFunc,
-		updateBytesWrittenFunc: updateBytesWrittenFunc,
+		tcpListeners:        tcpListeners,
+		tcpKeepAliveTimeout: tcpKeepAliveTimeout,
+		readTimeout:         readTimeout,
+		writeTimeout:        writeTimeout,
 	}
 	listener.start()
 

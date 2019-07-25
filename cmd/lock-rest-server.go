@@ -323,13 +323,13 @@ func startLockMaintenance(lkSrv *lockRESTServer) {
 // registerLockRESTHandlers - register lock rest router.
 func registerLockRESTHandlers(router *mux.Router) {
 	subrouter := router.PathPrefix(lockRESTPath).Subrouter()
-	subrouter.Methods(http.MethodPost).Path("/" + lockRESTMethodLock).HandlerFunc(httpTraceHdrs(globalLockServer.LockHandler))
-	subrouter.Methods(http.MethodPost).Path("/" + lockRESTMethodRLock).HandlerFunc(httpTraceHdrs(globalLockServer.RLockHandler))
-	subrouter.Methods(http.MethodPost).Path("/" + lockRESTMethodUnlock).HandlerFunc(httpTraceHdrs(globalLockServer.UnlockHandler))
-	subrouter.Methods(http.MethodPost).Path("/" + lockRESTMethodRUnlock).HandlerFunc(httpTraceHdrs(globalLockServer.RUnlockHandler))
-	subrouter.Methods(http.MethodPost).Path("/" + lockRESTMethodForceUnlock).HandlerFunc(httpTraceHdrs(globalLockServer.ForceUnlockHandler))
-	subrouter.Methods(http.MethodPost).Path("/" + lockRESTMethodExpired).HandlerFunc(httpTraceAll(globalLockServer.ExpiredHandler))
-	router.NotFoundHandler = http.HandlerFunc(httpTraceAll(notFoundHandler))
+	subrouter.Methods(http.MethodPost).Path("/" + lockRESTMethodLock).HandlerFunc(httpRecordTraffic(httpTraceHdrs(globalLockServer.LockHandler)))
+	subrouter.Methods(http.MethodPost).Path("/" + lockRESTMethodRLock).HandlerFunc(httpRecordTraffic(httpTraceHdrs(globalLockServer.RLockHandler)))
+	subrouter.Methods(http.MethodPost).Path("/" + lockRESTMethodUnlock).HandlerFunc(httpRecordTraffic(httpTraceHdrs(globalLockServer.UnlockHandler)))
+	subrouter.Methods(http.MethodPost).Path("/" + lockRESTMethodRUnlock).HandlerFunc(httpRecordTraffic(httpTraceHdrs(globalLockServer.RUnlockHandler)))
+	subrouter.Methods(http.MethodPost).Path("/" + lockRESTMethodForceUnlock).HandlerFunc(httpRecordTraffic(httpTraceHdrs(globalLockServer.ForceUnlockHandler)))
+	subrouter.Methods(http.MethodPost).Path("/" + lockRESTMethodExpired).HandlerFunc(httpRecordTraffic(httpTraceAll(globalLockServer.ExpiredHandler)))
+	router.NotFoundHandler = http.HandlerFunc(httpRecordTraffic(httpTraceAll(notFoundHandler)))
 
 	// Start lock maintenance from all lock servers.
 	go startLockMaintenance(globalLockServer)

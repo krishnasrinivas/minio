@@ -336,6 +336,13 @@ func httpTraceAll(f http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// Record the incoming/outgoing traffic.
+func httpRecordTraffic(f http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		RecordTraffic(f, w, r)
+	}
+}
+
 // Log only the headers.
 func httpTraceHdrs(f http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

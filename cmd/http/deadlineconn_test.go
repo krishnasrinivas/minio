@@ -49,7 +49,7 @@ func TestBuffConnReadTimeout(t *testing.T) {
 			t.Errorf("failed to accept new connection. %v", terr)
 			return
 		}
-		deadlineconn := newDeadlineConn(tcpConn, 1*time.Second, 1*time.Second, nil, nil)
+		deadlineconn := newDeadlineConn(tcpConn, 1*time.Second, 1*time.Second)
 		defer deadlineconn.Close()
 
 		// Read a line

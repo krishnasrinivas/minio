@@ -19,6 +19,7 @@ package cmd
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -31,6 +32,8 @@ import (
 type ConnStats struct {
 	totalInputBytes  atomic.Uint64
 	totalOutputBytes atomic.Uint64
+	s3InputBytes     atomic.Uint64
+	s3OutputBytes    atomic.Uint64
 }
 
 // Increase total input bytes
@@ -53,11 +56,33 @@ func (s *ConnStats) getTotalOutputBytes() uint64 {
 	return s.totalOutputBytes.Load()
 }
 
-// Return connection stats (total input/output bytes)
+// Increase outbound input bytes
+func (s *ConnStats) incS3InputBytes(n int) {
+	s.s3InputBytes.Add(uint64(n))
+}
+
+// Increase outbound output bytes
+func (s *ConnStats) incS3OutputBytes(n int) {
+	s.s3OutputBytes.Add(uint64(n))
+}
+
+// Return outbound input bytes
+func (s *ConnStats) getS3InputBytes() uint64 {
+	return s.s3InputBytes.Load()
+}
+
+// Return outbound output bytes
+func (s *ConnStats) getS3OutputBytes() uint64 {
+	return s.s3OutputBytes.Load()
+}
+
+// Return connection stats (total input/output bytes and total s3 input/output bytes)
 func (s *ConnStats) toServerConnStats() ServerConnStats {
 	return ServerConnStats{
 		TotalInputBytes:  s.getTotalInputBytes(),
 		TotalOutputBytes: s.getTotalOutputBytes(),
+		S3InputBytes:     s.getS3InputBytes(),
+		S3OutputBytes:    s.getS3OutputBytes(),
 	}
 }
 
@@ -95,6 +120,12 @@ type HTTPStats struct {
 	// DELETE request stats.
 	totalDELETEs   HTTPMethodStats
 	successDELETEs HTTPMethodStats
+
+	// Total s3 request count.
+	totalS3REQUESTs atomic.Uint64
+
+	// Failed s3 requests.
+	failedS3REQUESTs atomic.Uint64
 }
 
 func durationStr(totalDuration, totalCount float64) string {
@@ -144,6 +175,8 @@ func (st HTTPStats) toServerHTTPStats() ServerHTTPStats {
 		Count:       st.successDELETEs.Counter.Load(),
 		AvgDuration: durationStr(st.successDELETEs.Duration.Load(), float64(st.successDELETEs.Counter.Load())),
 	}
+	serverStats.TotalS3REQUESTStats = st.totalS3REQUESTs.Load()
+	serverStats.FailedS3REQUESTStats = st.failedS3REQUESTs.Load()
 	return serverStats
 }
 
@@ -189,6 +222,15 @@ func (st *HTTPStats) updateStats(r *http.Request, w *httpResponseRecorder, durat
 			st.successDELETEs.Duration.Add(durationSecs)
 		}
 	}
+
+	if !strings.HasPrefix(r.URL.Path, "/minio") && !strings.HasSuffix(r.URL.Path, prometheusMetricsPath) {
+		st.totalS3REQUESTs.Inc()
+		// Storage APIs will respond with status code 0 for a successful request.
+		if !successReq && w.respStatusCode != 0 {
+			st.failedS3REQUESTs.Inc()
+		}
+	}
+
 	// Increment the prometheus http request response histogram with appropriate label
 	httpRequestsDuration.With(prometheus.Labels{"request_type": r.Method}).Observe(durationSecs)
 }

@@ -81,50 +81,6 @@ func (c *minioCollector) Collect(ch chan<- prometheus.Metric) {
 	// Expose MinIO's version information
 	minioVersionInfo.WithLabelValues(Version, CommitID).Add(1)
 
-	// Always expose network stats
-
-	// Network Sent/Received Bytes
-	ch <- prometheus.MustNewConstMetric(
-		prometheus.NewDesc(
-			prometheus.BuildFQName("minio", "network", "sent_bytes_total"),
-			"Total number of bytes sent by current MinIO server instance",
-			nil, nil),
-		prometheus.CounterValue,
-		float64(globalConnStats.getTotalOutputBytes()),
-	)
-	ch <- prometheus.MustNewConstMetric(
-		prometheus.NewDesc(
-			prometheus.BuildFQName("minio", "network", "received_bytes_total"),
-			"Total number of bytes received by current MinIO server instance",
-			nil, nil),
-		prometheus.CounterValue,
-		float64(globalConnStats.getTotalInputBytes()),
-	)
-
-	// Expose cache stats only if available
-	cacheObjLayer := newCacheObjectsFn()
-	if cacheObjLayer != nil {
-		cs := cacheObjLayer.StorageInfo(context.Background())
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName("minio", "disk", "cache_storage_bytes"),
-				"Total cache capacity on current MinIO server instance",
-				nil, nil),
-			prometheus.GaugeValue,
-			float64(cs.Total),
-		)
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName("minio", "disk", "cache_storage_free_bytes"),
-				"Total cache available on current MinIO server instance",
-				nil, nil),
-			prometheus.GaugeValue,
-			float64(cs.Free),
-		)
-	}
-
-	// Expose disk stats only if applicable
-
 	// Fetch disk space info
 	objLayer := newObjectLayerFn()
 	// Service not initialized yet
@@ -132,70 +88,156 @@ func (c *minioCollector) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	s := objLayer.StorageInfo(context.Background())
-
-	// Gateways don't provide disk info
-	if s.Backend.Type == Unknown {
-		return
-	}
+	serverInfo := globalNotificationSys.ServerInfo(context.Background())
+	// Once we have received all the ServerInfo from peers
+	// add the local peer server info as well.
+	serverInfo = append(serverInfo, ServerInfo{
+		Addr: GetLocalPeer(globalEndpoints),
+		Data: &ServerInfoData{
+			StorageInfo: objLayer.StorageInfo(context.Background()),
+			ConnStats:   globalConnStats.toServerConnStats(),
+			HTTPStats:   globalHTTPStats.toServerHTTPStats(),
+			Properties: ServerProperties{
+				Uptime:       UTCNow().Sub(globalBootTime),
+				Version:      Version,
+				CommitID:     CommitID,
+				DeploymentID: globalDeploymentID,
+				SQSARN:       globalNotificationSys.GetARNList(),
+				Region:       globalServerConfig.GetRegion(),
+			},
+		},
+	})
 
 	var totalDisks, offlineDisks int
-	// Setting totalDisks to 1 and offlineDisks to 0 in FS mode
-	if s.Backend.Type == BackendFS {
-		totalDisks = 1
-		offlineDisks = 0
-	} else {
-		offlineDisks = s.Backend.OfflineDisks
-		totalDisks = s.Backend.OfflineDisks + s.Backend.OnlineDisks
+	for _, info := range serverInfo {
+		// Network Sent/Received Bytes
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc(
+				prometheus.BuildFQName("minio", "http", "tx_bytes_total"),
+				"Total number of bytes sent by current MinIO server instance",
+				[]string{"node"}, nil),
+			prometheus.CounterValue,
+			float64(info.Data.ConnStats.TotalOutputBytes),
+			info.Addr,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc(
+				prometheus.BuildFQName("minio", "http", "rx_bytes_total"),
+				"Total number of bytes received by current MinIO server instance",
+				[]string{"node"}, nil),
+			prometheus.CounterValue,
+			float64(info.Data.ConnStats.TotalInputBytes),
+			info.Addr,
+		)
+
+		// Network Sent/Received Bytes (Outbound)
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc(
+				prometheus.BuildFQName("minio", "http", "s3_tx_bytes_total"),
+				"Total number of s3 bytes sent by current MinIO server instance",
+				[]string{"node"}, nil),
+			prometheus.CounterValue,
+			float64(info.Data.ConnStats.S3OutputBytes),
+			info.Addr,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc(
+				prometheus.BuildFQName("minio", "http", "s3_rx_bytes_total"),
+				"Total number of s3 bytes received by current MinIO server instance",
+				[]string{"node"}, nil),
+			prometheus.CounterValue,
+			float64(info.Data.ConnStats.S3InputBytes),
+			info.Addr,
+		)
+
+		// Total number of s3 requests.
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc(
+				prometheus.BuildFQName("minio", "http", "s3_request_count"),
+				"Total number of s3 requests received by current MinIO server instance",
+				[]string{"node"}, nil),
+			prometheus.CounterValue,
+			float64(info.Data.HTTPStats.TotalS3REQUESTStats),
+			info.Addr,
+		)
+
+		// No of s3 requests failed.
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc(
+				prometheus.BuildFQName("minio", "http", "s3_error_count"),
+				"Total number of failed s3 requests received by current MinIO server instance",
+				[]string{"node"}, nil),
+			prometheus.CounterValue,
+			float64(info.Data.HTTPStats.FailedS3REQUESTStats),
+			info.Addr,
+		)
+
+		// Total disk usage by current MinIO server instance
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc(
+				prometheus.BuildFQName("minio", "disk", "storage_used_bytes"),
+				"Total disk storage used by current MinIO server instance",
+				[]string{"node"}, nil),
+			prometheus.GaugeValue,
+			float64(info.Data.StorageInfo.Used),
+			info.Addr,
+		)
+
+		// Total disk available space seen by MinIO server instance
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc(
+				prometheus.BuildFQName("minio", "disk", "storage_available_bytes"),
+				"Total disk available space seen by MinIO server instance",
+				[]string{"node"}, nil),
+			prometheus.GaugeValue,
+			float64(info.Data.StorageInfo.Available),
+			info.Addr,
+		)
+
+		// Total disk space seen by MinIO server instance
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc(
+				prometheus.BuildFQName("minio", "disk", "storage_total_bytes"),
+				"Total disk space seen by MinIO server instance",
+				[]string{"node"}, nil),
+			prometheus.GaugeValue,
+			float64(info.Data.StorageInfo.Total),
+			info.Addr,
+		)
+
+		// Setting totalDisks to 1 and offlineDisks to 0 in FS mode
+		if info.Data.StorageInfo.Backend.Type == BackendFS {
+			totalDisks = 1
+			offlineDisks = 0
+		} else {
+			offlineDisks = info.Data.StorageInfo.Backend.OfflineDisks
+			totalDisks = info.Data.StorageInfo.Backend.OfflineDisks + info.Data.StorageInfo.Backend.OnlineDisks
+		}
+
+		// MinIO Total Disk/Offline Disk
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc(
+				prometheus.BuildFQName("minio", "disks", "total"),
+				"Total number of disks for current MinIO server instance",
+				[]string{"node"}, nil),
+			prometheus.GaugeValue,
+			float64(totalDisks),
+			info.Addr,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc(
+				prometheus.BuildFQName("minio", "disks", "offline"),
+				"Total number of offline disks for current MinIO server instance",
+				[]string{"node"}, nil),
+			prometheus.GaugeValue,
+			float64(offlineDisks),
+			info.Addr,
+		)
+
 	}
 
-	// Total disk usage by current MinIO server instance
-	ch <- prometheus.MustNewConstMetric(
-		prometheus.NewDesc(
-			prometheus.BuildFQName("minio", "disk", "storage_used_bytes"),
-			"Total disk storage used by current MinIO server instance",
-			nil, nil),
-		prometheus.GaugeValue,
-		float64(s.Used),
-	)
-
-	// Total disk available space seen by MinIO server instance
-	ch <- prometheus.MustNewConstMetric(
-		prometheus.NewDesc(
-			prometheus.BuildFQName("minio", "disk", "storage_available_bytes"),
-			"Total disk available space seen by MinIO server instance",
-			nil, nil),
-		prometheus.GaugeValue,
-		float64(s.Available),
-	)
-
-	// Total disk space seen by MinIO server instance
-	ch <- prometheus.MustNewConstMetric(
-		prometheus.NewDesc(
-			prometheus.BuildFQName("minio", "disk", "storage_total_bytes"),
-			"Total disk space seen by MinIO server instance",
-			nil, nil),
-		prometheus.GaugeValue,
-		float64(s.Total),
-	)
-
-	// MinIO Total Disk/Offline Disk
-	ch <- prometheus.MustNewConstMetric(
-		prometheus.NewDesc(
-			prometheus.BuildFQName("minio", "total", "disks"),
-			"Total number of disks for current MinIO server instance",
-			nil, nil),
-		prometheus.GaugeValue,
-		float64(totalDisks),
-	)
-	ch <- prometheus.MustNewConstMetric(
-		prometheus.NewDesc(
-			prometheus.BuildFQName("minio", "offline", "disks"),
-			"Total number of offline disks for current MinIO server instance",
-			nil, nil),
-		prometheus.GaugeValue,
-		float64(offlineDisks),
-	)
 }
 
 func metricsHandler() http.Handler {
@@ -211,7 +253,6 @@ func metricsHandler() http.Handler {
 	logger.LogIf(context.Background(), err)
 
 	gatherers := prometheus.Gatherers{
-		prometheus.DefaultGatherer,
 		registry,
 	}
 	// Delegate http serving to Prometheus client library, which will call collector.Collect.

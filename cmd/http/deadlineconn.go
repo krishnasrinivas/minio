@@ -24,10 +24,8 @@ import (
 // DeadlineConn - is a generic stream-oriented network connection supporting buffered reader and read/write timeout.
 type DeadlineConn struct {
 	net.Conn
-	readTimeout            time.Duration // sets the read timeout in the connection.
-	writeTimeout           time.Duration // sets the write timeout in the connection.
-	updateBytesReadFunc    func(int)     // function to be called to update bytes read.
-	updateBytesWrittenFunc func(int)     // function to be called to update bytes written.
+	readTimeout  time.Duration // sets the read timeout in the connection.
+	writeTimeout time.Duration // sets the write timeout in the connection.
 }
 
 // Sets read timeout
@@ -46,32 +44,20 @@ func (c *DeadlineConn) setWriteTimeout() {
 // Read - reads data from the connection using wrapped buffered reader.
 func (c *DeadlineConn) Read(b []byte) (n int, err error) {
 	c.setReadTimeout()
-	n, err = c.Conn.Read(b)
-	if err == nil && c.updateBytesReadFunc != nil {
-		c.updateBytesReadFunc(n)
-	}
-
-	return n, err
+	return c.Conn.Read(b)
 }
 
 // Write - writes data to the connection.
 func (c *DeadlineConn) Write(b []byte) (n int, err error) {
 	c.setWriteTimeout()
-	n, err = c.Conn.Write(b)
-	if err == nil && c.updateBytesWrittenFunc != nil {
-		c.updateBytesWrittenFunc(n)
-	}
-
-	return n, err
+	return c.Conn.Write(b)
 }
 
 // newDeadlineConn - creates a new connection object wrapping net.Conn with deadlines.
-func newDeadlineConn(c net.Conn, readTimeout, writeTimeout time.Duration, updateBytesReadFunc, updateBytesWrittenFunc func(int)) *DeadlineConn {
+func newDeadlineConn(c net.Conn, readTimeout, writeTimeout time.Duration) *DeadlineConn {
 	return &DeadlineConn{
-		Conn:                   c,
-		readTimeout:            readTimeout,
-		writeTimeout:           writeTimeout,
-		updateBytesReadFunc:    updateBytesReadFunc,
-		updateBytesWrittenFunc: updateBytesWrittenFunc,
+		Conn:         c,
+		readTimeout:  readTimeout,
+		writeTimeout: writeTimeout,
 	}
 }
