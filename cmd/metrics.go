@@ -19,6 +19,10 @@ package cmd
 import (
 	"context"
 	"net/http"
+	"strconv"
+	"strings"
+
+	humanize "github.com/dustin/go-humanize"
 
 	"github.com/minio/minio/cmd/logger"
 	"github.com/prometheus/client_golang/prometheus"
@@ -86,6 +90,71 @@ func (c *minioCollector) Collect(ch chan<- prometheus.Metric) {
 	// Service not initialized yet
 	if objLayer == nil {
 		return
+	}
+
+	for _, endpoint := range globalEndpoints {
+		sApi, err := newStorageAPI(endpoint)
+		if err != nil {
+			continue
+		}
+		dInfo, dErr := sApi.DiskInfo()
+		if dErr != nil {
+			continue
+		}
+		used := humanize.IBytes(dInfo.Total - dInfo.Free)
+		unit, err := strconv.ParseFloat(strings.Fields(used)[0], 64)
+		if err != nil {
+			continue
+		}
+
+		// Total disk usage by the disk
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc(
+				prometheus.BuildFQName("minio", "disk", "storage_used"),
+				"Total disk storage used by the disk",
+				[]string{"mountpoint", "unit"}, nil),
+			prometheus.GaugeValue,
+			unit,
+			endpoint.String(),
+			strings.Fields(used)[1],
+		)
+
+		available := humanize.IBytes(dInfo.Free)
+		unit, err = strconv.ParseFloat(strings.Fields(available)[0], 64)
+		if err != nil {
+			continue
+		}
+
+		// Total available space in the disk
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc(
+				prometheus.BuildFQName("minio", "disk", "storage_available"),
+				"Total available space left in the disk",
+				[]string{"mountpoint", "unit"}, nil),
+			prometheus.GaugeValue,
+			unit,
+			endpoint.String(),
+			strings.Fields(available)[1],
+		)
+
+		total := humanize.IBytes(dInfo.Total)
+		unit, err = strconv.ParseFloat(strings.Fields(total)[0], 64)
+		if err != nil {
+			continue
+		}
+
+		// Total storage space of the disk
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc(
+				prometheus.BuildFQName("minio", "disk", "storage_total"),
+				"Total space of the disk",
+				[]string{"mountpoint", "unit"}, nil),
+			prometheus.GaugeValue,
+			unit,
+			endpoint.String(),
+			strings.Fields(total)[1],
+		)
+
 	}
 
 	serverInfo := globalNotificationSys.ServerInfo(context.Background())
@@ -171,39 +240,6 @@ func (c *minioCollector) Collect(ch chan<- prometheus.Metric) {
 				[]string{"node"}, nil),
 			prometheus.CounterValue,
 			float64(info.Data.HTTPStats.FailedS3REQUESTStats),
-			info.Addr,
-		)
-
-		// Total disk usage by current MinIO server instance
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName("minio", "disk", "storage_used_bytes"),
-				"Total disk storage used by current MinIO server instance",
-				[]string{"node"}, nil),
-			prometheus.GaugeValue,
-			float64(info.Data.StorageInfo.Used),
-			info.Addr,
-		)
-
-		// Total disk available space seen by MinIO server instance
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName("minio", "disk", "storage_available_bytes"),
-				"Total disk available space seen by MinIO server instance",
-				[]string{"node"}, nil),
-			prometheus.GaugeValue,
-			float64(info.Data.StorageInfo.Available),
-			info.Addr,
-		)
-
-		// Total disk space seen by MinIO server instance
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName("minio", "disk", "storage_total_bytes"),
-				"Total disk space seen by MinIO server instance",
-				[]string{"node"}, nil),
-			prometheus.GaugeValue,
-			float64(info.Data.StorageInfo.Total),
 			info.Addr,
 		)
 
