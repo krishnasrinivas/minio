@@ -181,7 +181,7 @@ func (st HTTPStats) toServerHTTPStats() ServerHTTPStats {
 }
 
 // Update statistics from http request and response data
-func (st *HTTPStats) updateStats(r *http.Request, w *httpResponseRecorder, durationSecs float64) {
+func (st *HTTPStats) updateStats(r *http.Request, w *recordTrafficResponse, durationSecs float64) {
 	// A successful request has a 2xx response code
 	successReq := (w.respStatusCode >= 200 && w.respStatusCode < 300)
 	// Update stats according to method verb

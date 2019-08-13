@@ -17,9 +17,7 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
-	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -515,34 +513,6 @@ func (h resourceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.handler.ServeHTTP(w, r)
 }
 
-// httpResponseRecorder wraps http.ResponseWriter
-// to record some useful http response data.
-type httpResponseRecorder struct {
-	http.ResponseWriter
-	respStatusCode int
-}
-
-// Wraps ResponseWriter's Write()
-func (rww *httpResponseRecorder) Write(b []byte) (int, error) {
-	return rww.ResponseWriter.Write(b)
-}
-
-// Wraps ResponseWriter's Flush()
-func (rww *httpResponseRecorder) Flush() {
-	rww.ResponseWriter.(http.Flusher).Flush()
-}
-
-// Wraps ResponseWriter's WriteHeader() and record
-// the response status code
-func (rww *httpResponseRecorder) WriteHeader(httpCode int) {
-	rww.respStatusCode = httpCode
-	rww.ResponseWriter.WriteHeader(httpCode)
-}
-
-func (rww *httpResponseRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	return rww.ResponseWriter.(http.Hijacker).Hijack()
-}
-
 // httpStatsHandler definition: gather HTTP statistics
 type httpStatsHandler struct {
 	handler http.Handler
@@ -554,14 +524,16 @@ func setHTTPStatsHandler(h http.Handler) http.Handler {
 }
 
 func (h httpStatsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Wraps w to record http response information
-	ww := &httpResponseRecorder{ResponseWriter: w}
+	isS3Request := !strings.HasPrefix(r.URL.Path, "/minio")
+	recordRequest := &recordTrafficRequest{r.Body, isS3Request}
+	r.Body = recordRequest
+	recordResponse := &recordTrafficResponse{w, 0, isS3Request}
 
 	// Time start before the call is about to start.
 	tBefore := UTCNow()
 
 	// Execute the request
-	h.handler.ServeHTTP(ww, r)
+	h.handler.ServeHTTP(recordResponse, r)
 
 	// Time after call has completed.
 	tAfter := UTCNow()
@@ -573,7 +545,7 @@ func (h httpStatsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	durationSecs := tAfter.Sub(tBefore).Seconds()
 
 	// Update http statistics
-	globalHTTPStats.updateStats(r, ww, durationSecs)
+	globalHTTPStats.updateStats(r, recordResponse, durationSecs)
 }
 
 // requestValidityHandler validates all the incoming paths for

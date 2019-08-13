@@ -59,23 +59,23 @@ func registerSTSRouter(router *mux.Router) {
 		authOk := wildcard.MatchSimple(signV4Algorithm+"*", r.Header.Get(xhttp.Authorization))
 		noQueries := len(r.URL.Query()) == 0
 		return ctypeOk && authOk && noQueries
-	}).HandlerFunc(httpRecordTraffic(httpTraceAll(sts.AssumeRole)))
+	}).HandlerFunc(httpTraceAll(sts.AssumeRole))
 
 	// Assume roles with JWT handler, handles both ClientGrants and WebIdentity.
 	stsRouter.Methods("POST").MatcherFunc(func(r *http.Request, rm *mux.RouteMatch) bool {
 		ctypeOk := wildcard.MatchSimple("application/x-www-form-urlencoded*", r.Header.Get(xhttp.ContentType))
 		noQueries := len(r.URL.Query()) == 0
 		return ctypeOk && noQueries
-	}).HandlerFunc(httpRecordTraffic(httpTraceAll(sts.AssumeRoleWithJWT)))
+	}).HandlerFunc(httpTraceAll(sts.AssumeRoleWithJWT))
 
 	// AssumeRoleWithClientGrants
-	stsRouter.Methods("POST").HandlerFunc(httpRecordTraffic(httpTraceAll(sts.AssumeRoleWithClientGrants))).
+	stsRouter.Methods("POST").HandlerFunc(httpTraceAll(sts.AssumeRoleWithClientGrants)).
 		Queries("Action", clientGrants).
 		Queries("Version", stsAPIVersion).
 		Queries("Token", "{Token:.*}")
 
 	// AssumeRoleWithWebIdentity
-	stsRouter.Methods("POST").HandlerFunc(httpRecordTraffic(httpTraceAll(sts.AssumeRoleWithWebIdentity))).
+	stsRouter.Methods("POST").HandlerFunc(httpTraceAll(sts.AssumeRoleWithWebIdentity)).
 		Queries("Action", webIdentity).
 		Queries("Version", stsAPIVersion).
 		Queries("WebIdentityToken", "{Token:.*}")
