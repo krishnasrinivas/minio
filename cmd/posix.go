@@ -1225,13 +1225,23 @@ func (s *posix) CreateFile(volume, path string, fileSize int64, r io.Reader) (er
 	}
 
 	defer w.Close()
+	var written int64
+	if wt, ok := r.(io.WriterTo); ok {
+		if err = disk.DisableDirectIO(w); err != nil {
+			return err
+		}
+		written, err = wt.WriteTo(w)
+		if err != nil {
+			return err
+		}
+	} else {
+		bufp := s.pool.Get().(*[]byte)
+		defer s.pool.Put(bufp)
 
-	bufp := s.pool.Get().(*[]byte)
-	defer s.pool.Put(bufp)
-
-	written, err := xioutil.CopyAligned(w, r, *bufp, fileSize)
-	if err != nil {
-		return err
+		written, err = xioutil.CopyAligned(w, r, *bufp, fileSize)
+		if err != nil {
+			return err
+		}
 	}
 
 	if written < fileSize {

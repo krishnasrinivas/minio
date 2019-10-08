@@ -70,6 +70,9 @@ func (c *Client) CallWithContext(ctx context.Context, method string, values url.
 	if length > 0 {
 		req.ContentLength = length
 	}
+	if method == "createfile" {
+		req.ContentLength = -1
+	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, &NetworkError{err}

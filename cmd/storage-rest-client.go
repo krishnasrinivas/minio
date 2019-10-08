@@ -228,7 +228,8 @@ func (client *storageRESTClient) CreateFile(volume, path string, length int64, r
 	values.Set(storageRESTVolume, volume)
 	values.Set(storageRESTFilePath, path)
 	values.Set(storageRESTLength, strconv.Itoa(int(length)))
-	respBody, err := client.call(storageRESTMethodCreateFile, values, ioutil.NopCloser(r), length)
+	// respBody, err := client.call(storageRESTMethodCreateFile, values, ioutil.NopCloser(r), length)
+	respBody, err := client.call(storageRESTMethodCreateFile, values, r, length)
 	defer http.DrainBody(respBody)
 	return err
 }
