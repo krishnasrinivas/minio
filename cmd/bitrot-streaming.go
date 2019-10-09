@@ -17,13 +17,8 @@
 package cmd
 
 import (
-	"bytes"
-	"context"
-	"encoding/hex"
 	"hash"
 	"io"
-
-	"github.com/minio/minio/cmd/logger"
 )
 
 // Calculates bitrot in chunks and writes the hash into the stream.
@@ -47,15 +42,15 @@ func (b *streamingBitrotWriter) Write(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
-	b.h.Reset()
-	b.h.Write(p)
-	hashBytes := b.h.Sum(nil)
-	n, err := b.w.Write(hashBytes)
-	b.written += int64(n)
-	if err != nil {
-		return 0, err
-	}
-	n, err = b.w.Write(p)
+	// b.h.Reset()
+	// b.h.Write(p)
+	// hashBytes := b.h.Sum(nil)
+	// n, err := b.w.Write(hashBytes)
+	// b.written += int64(n)
+	// if err != nil {
+	// 	return 0, err
+	// }
+	n, err := b.w.Write(p)
 	b.written += int64(n)
 	return n, err
 }
@@ -143,7 +138,8 @@ func (b *streamingBitrotReader) ReadAt(buf []byte, offset int64) (int, error) {
 	if b.rc == nil {
 		// For the first ReadAt() call we need to open the stream for reading.
 		b.currOffset = offset
-		streamOffset := (offset/b.shardSize)*int64(b.h.Size()) + offset
+		// streamOffset := (offset/b.shardSize)*int64(b.h.Size()) + offset
+		streamOffset := offset
 		b.rc, err = b.disk.ReadFileStream(b.volume, b.filePath, streamOffset, b.tillOffset-streamOffset)
 		if err != nil {
 			return 0, err
@@ -153,22 +149,22 @@ func (b *streamingBitrotReader) ReadAt(buf []byte, offset int64) (int, error) {
 		// Can never happen unless there are programmer bugs
 		return 0, errUnexpected
 	}
-	b.h.Reset()
-	_, err = io.ReadFull(b.rc, b.hashBytes)
-	if err != nil {
-		return 0, err
-	}
+	// b.h.Reset()
+	// _, err = io.ReadFull(b.rc, b.hashBytes)
+	// if err != nil {
+	// 	return 0, err
+	// }
 	_, err = io.ReadFull(b.rc, buf)
 	if err != nil {
 		return 0, err
 	}
-	b.h.Write(buf)
+	// b.h.Write(buf)
 
-	if !bytes.Equal(b.h.Sum(nil), b.hashBytes) {
-		err = HashMismatchError{hex.EncodeToString(b.hashBytes), hex.EncodeToString(b.h.Sum(nil))}
-		logger.LogIf(context.Background(), err)
-		return 0, err
-	}
+	// if !bytes.Equal(b.h.Sum(nil), b.hashBytes) {
+	// 	err = HashMismatchError{hex.EncodeToString(b.hashBytes), hex.EncodeToString(b.h.Sum(nil))}
+	// 	logger.LogIf(context.Background(), err)
+	// 	return 0, err
+	// }
 	b.currOffset += int64(len(buf))
 	return len(buf), nil
 }

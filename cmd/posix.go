@@ -32,6 +32,7 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"bytes"
 
@@ -1136,6 +1137,62 @@ func (s *posix) ReadFileStream(volume, path string, offset, length int64) (io.Re
 	return readahead.NewReadCloser(r), nil
 }
 
+type alignedWriter struct {
+	w               *os.File
+	disabledirectio bool
+}
+
+const directioAlignSize = 4 * 1024
+
+func (a *alignedWriter) Write(buf []byte) (int, error) {
+	if uintptr(unsafe.Pointer(&buf[0]))%directioAlignSize != 0 {
+		// Write on O_DIRECT fds fail if buffer is not 4K aligned, hence disable O_DIRECT.
+		if err := disk.DisableDirectIO(a.w); err != nil {
+			return 0, err
+		}
+	}
+	writeUnaligned := func(w *os.File, buf []byte) (remainingWritten int, err error) {
+		var n int
+		remaining := len(buf)
+		// The following logic writes the remainging data such that it writes whatever best is possible (aligned buffer)
+		// in O_DIRECT mode and remaining (unaligned buffer) in non-O_DIRECT mode.
+		remainingAligned := (remaining / directioAlignSize) * directioAlignSize
+		remainingAlignedBuf := buf[:remainingAligned]
+		remainingUnalignedBuf := buf[remainingAligned:]
+		if len(remainingAlignedBuf) > 0 {
+			n, err = w.Write(remainingAlignedBuf)
+			if err != nil {
+				return remainingWritten, err
+			}
+			remainingWritten += n
+		}
+		if len(remainingUnalignedBuf) > 0 {
+			a.disabledirectio = true
+			// Write on O_DIRECT fds fail if buffer is not 4K aligned, hence disable O_DIRECT.
+			if err = disk.DisableDirectIO(w); err != nil {
+				return remainingWritten, err
+			}
+			n, err = w.Write(remainingUnalignedBuf)
+			if err != nil {
+				return remainingWritten, err
+			}
+			remainingWritten += n
+		}
+		return remainingWritten, nil
+	}
+
+	var nw int
+	var err error
+	if len(buf)%directioAlignSize == 0 {
+		// buf is aligned for directio write()
+		nw, err = a.w.Write(buf)
+	} else {
+		// buf is not aligned, hence use writeUnaligned()
+		nw, err = writeUnaligned(a.w, buf)
+	}
+	return nw, err
+}
+
 // CreateFile - creates the file.
 func (s *posix) CreateFile(volume, path string, fileSize int64, r io.Reader) (err error) {
 	if fileSize < -1 {
@@ -1226,11 +1283,11 @@ func (s *posix) CreateFile(volume, path string, fileSize int64, r io.Reader) (er
 
 	defer w.Close()
 	var written int64
-	if wt, ok := r.(io.WriterTo); ok {
-		if err = disk.DisableDirectIO(w); err != nil {
-			return err
-		}
-		written, err = wt.WriteTo(w)
+	if wt, ok := r.(*streamingBitrotWriter); ok {
+		// if err = disk.DisableDirectIO(w); err != nil {
+		// 	return err
+		// }
+		written, err = wt.WriteTo(&alignedWriter{w, false})
 		if err != nil {
 			return err
 		}

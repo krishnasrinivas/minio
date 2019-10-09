@@ -18,6 +18,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"sync"
@@ -48,6 +49,7 @@ func (p *parallelWriter) Write(ctx context.Context, blocks [][]byte) error {
 			_, p.errs[i] = p.writers[i].Write(blocks[i])
 			if p.errs[i] != nil {
 				p.writers[i] = nil
+				fmt.Println(p.errs[i])
 			}
 		}(i)
 	}

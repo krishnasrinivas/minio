@@ -22,6 +22,8 @@
 
 package bpool
 
+import "github.com/ncw/directio"
+
 // BytePoolCap implements a leaky pool of []byte in the form of a bounded channel.
 type BytePoolCap struct {
 	c    chan []byte
@@ -48,9 +50,12 @@ func (bp *BytePoolCap) Get() (b []byte) {
 	default:
 		// create new buffer
 		if bp.wcap > 0 {
-			b = make([]byte, bp.w, bp.wcap)
+			b = directio.AlignedBlock(bp.wcap)
+			b = b[:bp.w]
+			// b = make([]byte, bp.w, bp.wcap)
 		} else {
-			b = make([]byte, bp.w)
+			b = directio.AlignedBlock(bp.w)
+			// b = make([]byte, bp.w)
 		}
 	}
 	return

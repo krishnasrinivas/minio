@@ -278,7 +278,7 @@ func newXLSets(endpoints EndpointList, format *formatXLV3, setCount int, drivesP
 
 	// Initialize byte pool once for all sets, bpool size is set to
 	// setCount * drivesPerSet with each memory upto blockSizeV1.
-	bp := bpool.NewBytePoolCap(setCount*drivesPerSet, blockSizeV1, blockSizeV1*2)
+	bp := bpool.NewBytePoolCap(setCount*drivesPerSet, blockSizeV1, blockSizeV1*3)
 
 	for i := 0; i < len(format.XL.Sets); i++ {
 		s.xlDisks[i] = make([]StorageAPI, drivesPerSet)
