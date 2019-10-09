@@ -96,6 +96,7 @@ func newStreamingBitrotWriter(disk StorageAPI, volume, filePath string, length i
 		if length != -1 {
 			bitrotSumsTotalSize := ceilFrac(length, shardSize) * int64(h.Size()) // Size used for storing bitrot checksums.
 			totalFileSize = bitrotSumsTotalSize + length
+			totalFileSize = length
 		}
 		// err := disk.CreateFile(volume, filePath, totalFileSize, r)
 		// r.CloseWithError(err)
