@@ -96,6 +96,11 @@ func (s *storageRESTServer) IsValid(w http.ResponseWriter, r *http.Request) bool
 		// If format.json is available and request sent the right disk-id, we allow the request
 		return true
 	}
+	p := ""
+	if s.storage != nil {
+		p = s.storage.String()
+	}
+	fmt.Println("storageRESTServer errDiskStale", p, "got", diskID, "expected", storedDiskID)
 	s.writeErrorResponse(w, errDiskStale)
 	return false
 }
@@ -111,7 +116,10 @@ func (s *storageRESTServer) DiskInfoHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	defer w.(http.Flusher).Flush()
-	gob.NewEncoder(w).Encode(info)
+	err = gob.NewEncoder(w).Encode(info)
+	if err != nil {
+		fmt.Println("storageRESTServer DiskInfo response write failed:", s.storage.String(), err)
+	}
 }
 
 func (s *storageRESTServer) CrawlAndGetDataUsageHandler(w http.ResponseWriter, r *http.Request) {
@@ -129,7 +137,10 @@ func (s *storageRESTServer) CrawlAndGetDataUsageHandler(w http.ResponseWriter, r
 		return
 	}
 
-	gob.NewEncoder(w).Encode(usageInfo)
+	err = gob.NewEncoder(w).Encode(usageInfo)
+	if err != nil {
+		fmt.Println("storageRESTServer CrawlAndGetDataUsageHandler response write failed:", s.storage.String(), err)
+	}
 	w.(http.Flusher).Flush()
 }
 
@@ -140,7 +151,12 @@ func (s *storageRESTServer) MakeVolHandler(w http.ResponseWriter, r *http.Reques
 	}
 	vars := mux.Vars(r)
 	volume := vars[storageRESTVolume]
+	t1 := time.Now()
 	err := s.storage.MakeVol(volume)
+	t2 := time.Now()
+	if t2.Sub(t1) > 5*time.Second {
+		fmt.Println("storageRESTServer MakeVol call > 5 secs :", s.storage.String(), volume)
+	}
 	if err != nil {
 		s.writeErrorResponse(w, err)
 	}
@@ -153,7 +169,12 @@ func (s *storageRESTServer) MakeVolBulkHandler(w http.ResponseWriter, r *http.Re
 	}
 	vars := mux.Vars(r)
 	volumes := strings.Split(vars[storageRESTVolumes], ",")
+	t1 := time.Now()
 	err := s.storage.MakeVolBulk(volumes...)
+	t2 := time.Now()
+	if t2.Sub(t1) > 5*time.Second {
+		fmt.Println("storageRESTServer MakeVolBulk call > 5 secs :", s.storage.String())
+	}
 	if err != nil {
 		s.writeErrorResponse(w, err)
 	}
@@ -164,12 +185,20 @@ func (s *storageRESTServer) ListVolsHandler(w http.ResponseWriter, r *http.Reque
 	if !s.IsValid(w, r) {
 		return
 	}
+	t1 := time.Now()
 	infos, err := s.storage.ListVols()
+	t2 := time.Now()
+	if t2.Sub(t1) > 5*time.Second {
+		fmt.Println("storageRESTServer ListVols call > 5 secs :", s.storage.String())
+	}
 	if err != nil {
 		s.writeErrorResponse(w, err)
 		return
 	}
-	gob.NewEncoder(w).Encode(&infos)
+	err = gob.NewEncoder(w).Encode(&infos)
+	if err != nil {
+		fmt.Println("storageRESTServer ListVolsHandler response write failed:", s.storage.String(), err)
+	}
 	w.(http.Flusher).Flush()
 }
 
@@ -180,12 +209,20 @@ func (s *storageRESTServer) StatVolHandler(w http.ResponseWriter, r *http.Reques
 	}
 	vars := mux.Vars(r)
 	volume := vars[storageRESTVolume]
+	t1 := time.Now()
 	info, err := s.storage.StatVol(volume)
+	t2 := time.Now()
+	if t2.Sub(t1) > 5*time.Second {
+		fmt.Println("storageRESTServer StatVol call > 5 secs :", s.storage.String())
+	}
 	if err != nil {
 		s.writeErrorResponse(w, err)
 		return
 	}
-	gob.NewEncoder(w).Encode(info)
+	err = gob.NewEncoder(w).Encode(info)
+	if err != nil {
+		fmt.Println("storageRESTServer StatVolHandler response write failed:", s.storage.String(), err)
+	}
 	w.(http.Flusher).Flush()
 }
 
@@ -196,7 +233,12 @@ func (s *storageRESTServer) DeleteVolHandler(w http.ResponseWriter, r *http.Requ
 	}
 	vars := mux.Vars(r)
 	volume := vars[storageRESTVolume]
+	t1 := time.Now()
 	err := s.storage.DeleteVol(volume)
+	t2 := time.Now()
+	if t2.Sub(t1) > 5*time.Second {
+		fmt.Println("storageRESTServer DeleteVol call > 5 secs :", s.storage.String())
+	}
 	if err != nil {
 		s.writeErrorResponse(w, err)
 	}
@@ -217,7 +259,12 @@ func (s *storageRESTServer) AppendFileHandler(w http.ResponseWriter, r *http.Req
 		s.writeErrorResponse(w, err)
 		return
 	}
+	t1 := time.Now()
 	err = s.storage.AppendFile(volume, filePath, buf)
+	t2 := time.Now()
+	if t2.Sub(t1) > 5*time.Second {
+		fmt.Println("storageRESTServer AppendFile call > 5 secs :", s.storage.String())
+	}
 	if err != nil {
 		s.writeErrorResponse(w, err)
 	}
@@ -238,7 +285,12 @@ func (s *storageRESTServer) CreateFileHandler(w http.ResponseWriter, r *http.Req
 		s.writeErrorResponse(w, err)
 		return
 	}
+	t1 := time.Now()
 	err = s.storage.CreateFile(volume, filePath, int64(fileSize), r.Body)
+	t2 := time.Now()
+	if t2.Sub(t1) > 5*time.Second {
+		fmt.Println("storageRESTServer CreateFile call > 5 secs :", s.storage.String())
+	}
 	if err != nil {
 		s.writeErrorResponse(w, err)
 	}
@@ -258,7 +310,12 @@ func (s *storageRESTServer) WriteAllHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	t1 := time.Now()
 	err := s.storage.WriteAll(volume, filePath, io.LimitReader(r.Body, r.ContentLength))
+	t2 := time.Now()
+	if t2.Sub(t1) > 5*time.Second {
+		fmt.Println("storageRESTServer WriteAll call > 5 secs :", s.storage.String())
+	}
 	if err != nil {
 		s.writeErrorResponse(w, err)
 	}
@@ -273,12 +330,20 @@ func (s *storageRESTServer) StatFileHandler(w http.ResponseWriter, r *http.Reque
 	volume := vars[storageRESTVolume]
 	filePath := vars[storageRESTFilePath]
 
+	t1 := time.Now()
 	info, err := s.storage.StatFile(volume, filePath)
+	t2 := time.Now()
+	if t2.Sub(t1) > 5*time.Second {
+		fmt.Println("storageRESTServer StatFile call > 5 secs :", s.storage.String())
+	}
 	if err != nil {
 		s.writeErrorResponse(w, err)
 		return
 	}
-	gob.NewEncoder(w).Encode(info)
+	err = gob.NewEncoder(w).Encode(info)
+	if err != nil {
+		fmt.Println("storageRESTServer StatFileHandler response write failed:", s.storage.String(), err)
+	}
 	w.(http.Flusher).Flush()
 }
 
@@ -291,13 +356,21 @@ func (s *storageRESTServer) ReadAllHandler(w http.ResponseWriter, r *http.Reques
 	volume := vars[storageRESTVolume]
 	filePath := vars[storageRESTFilePath]
 
+	t1 := time.Now()
 	buf, err := s.storage.ReadAll(volume, filePath)
+	t2 := time.Now()
+	if t2.Sub(t1) > 5*time.Second {
+		fmt.Println("storageRESTServer ReadAll call > 5 secs :", s.storage.String())
+	}
 	if err != nil {
 		s.writeErrorResponse(w, err)
 		return
 	}
 	w.Header().Set(xhttp.ContentLength, strconv.Itoa(len(buf)))
-	w.Write(buf)
+	_, err = w.Write(buf)
+	if err != nil {
+		fmt.Println("storageRESTServer ReadAllHandler response write failed:", s.storage.String(), err)
+	}
 	w.(http.Flusher).Flush()
 }
 
@@ -335,7 +408,12 @@ func (s *storageRESTServer) ReadFileHandler(w http.ResponseWriter, r *http.Reque
 		verifier = NewBitrotVerifier(BitrotAlgorithmFromString(vars[storageRESTBitrotAlgo]), hash)
 	}
 	buf := make([]byte, length)
+	t1 := time.Now()
 	_, err = s.storage.ReadFile(volume, filePath, int64(offset), buf, verifier)
+	t2 := time.Now()
+	if t2.Sub(t1) > 5*time.Second {
+		fmt.Println("storageRESTServer ReadFile call > 5 secs :", s.storage.String())
+	}
 	if err != nil {
 		s.writeErrorResponse(w, err)
 		return
@@ -364,7 +442,12 @@ func (s *storageRESTServer) ReadFileStreamHandler(w http.ResponseWriter, r *http
 		return
 	}
 
+	t1 := time.Now()
 	rc, err := s.storage.ReadFileStream(volume, filePath, int64(offset), int64(length))
+	t2 := time.Now()
+	if t2.Sub(t1) > 5*time.Second {
+		fmt.Println("storageRESTServer ReadFileStream call > 5 secs :", s.storage.String())
+	}
 	if err != nil {
 		s.writeErrorResponse(w, err)
 		return
@@ -373,7 +456,10 @@ func (s *storageRESTServer) ReadFileStreamHandler(w http.ResponseWriter, r *http
 
 	w.Header().Set(xhttp.ContentLength, strconv.Itoa(length))
 
-	io.Copy(w, rc)
+	_, err = io.Copy(w, rc)
+	if err != nil {
+		fmt.Println("storageRESTServer ReadFileStreamHandler response write failed:", s.storage.String(), err)
+	}
 	w.(http.Flusher).Flush()
 
 }
@@ -416,7 +502,12 @@ func (s *storageRESTServer) WalkHandler(w http.ResponseWriter, r *http.Request) 
 	endWalkCh := make(chan struct{})
 	defer close(endWalkCh)
 
+	t1 := time.Now()
 	fch, err := s.storage.Walk(volume, dirPath, markerPath, recursive, leafFile, readMetadata, endWalkCh)
+	t2 := time.Now()
+	if t2.Sub(t1) > 5*time.Second {
+		fmt.Println("storageRESTServer Walk call > 5 secs :", s.storage.String())
+	}
 	if err != nil {
 		s.writeErrorResponse(w, err)
 		return
@@ -444,12 +535,20 @@ func (s *storageRESTServer) ListDirHandler(w http.ResponseWriter, r *http.Reques
 		s.writeErrorResponse(w, err)
 		return
 	}
+	t1 := time.Now()
 	entries, err := s.storage.ListDir(volume, dirPath, count, leafFile)
+	t2 := time.Now()
+	if t2.Sub(t1) > 5*time.Second {
+		fmt.Println("storageRESTServer ListDir call > 5 secs :", s.storage.String())
+	}
 	if err != nil {
 		s.writeErrorResponse(w, err)
 		return
 	}
-	gob.NewEncoder(w).Encode(&entries)
+	err = gob.NewEncoder(w).Encode(&entries)
+	if err != nil {
+		fmt.Println("storageRESTServer ListDirHandler response write failed:", s.storage.String(), err)
+	}
 	w.(http.Flusher).Flush()
 }
 
@@ -462,7 +561,12 @@ func (s *storageRESTServer) DeleteFileHandler(w http.ResponseWriter, r *http.Req
 	volume := vars[storageRESTVolume]
 	filePath := vars[storageRESTFilePath]
 
+	t1 := time.Now()
 	err := s.storage.DeleteFile(volume, filePath)
+	t2 := time.Now()
+	if t2.Sub(t1) > 5*time.Second {
+		fmt.Println("storageRESTServer DeleteFile call > 5 secs :", s.storage.String())
+	}
 	if err != nil {
 		s.writeErrorResponse(w, err)
 	}
@@ -483,7 +587,12 @@ func (s *storageRESTServer) DeleteFileBulkHandler(w http.ResponseWriter, r *http
 	volume := vars.Get(storageRESTVolume)
 	filePaths := vars[storageRESTFilePath]
 
+	t1 := time.Now()
 	errs, err := s.storage.DeleteFileBulk(volume, filePaths)
+	t2 := time.Now()
+	if t2.Sub(t1) > 5*time.Second {
+		fmt.Println("storageRESTServer DeleteFileBulk call > 5 secs :", s.storage.String())
+	}
 	if err != nil {
 		s.writeErrorResponse(w, err)
 		return
@@ -496,7 +605,10 @@ func (s *storageRESTServer) DeleteFileBulkHandler(w http.ResponseWriter, r *http
 		}
 	}
 
-	gob.NewEncoder(w).Encode(derrsResp)
+	err = gob.NewEncoder(w).Encode(derrsResp)
+	if err != nil {
+		fmt.Println("storageRESTServer DeleteFileBulkHandler response write failed:", s.storage.String(), err)
+	}
 	w.(http.Flusher).Flush()
 }
 
@@ -510,7 +622,12 @@ func (s *storageRESTServer) RenameFileHandler(w http.ResponseWriter, r *http.Req
 	srcFilePath := vars[storageRESTSrcPath]
 	dstVolume := vars[storageRESTDstVolume]
 	dstFilePath := vars[storageRESTDstPath]
+	t1 := time.Now()
 	err := s.storage.RenameFile(srcVolume, srcFilePath, dstVolume, dstFilePath)
+	t2 := time.Now()
+	if t2.Sub(t1) > 5*time.Second {
+		fmt.Println("storageRESTServer RenameFile call > 5 secs :", s.storage.String())
+	}
 	if err != nil {
 		s.writeErrorResponse(w, err)
 	}
@@ -577,7 +694,12 @@ func (s *storageRESTServer) VerifyFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(xhttp.ContentType, "text/event-stream")
 	encoder := gob.NewEncoder(w)
 	doneCh := sendWhiteSpaceToHTTPResponse(w)
+	t1 := time.Now()
 	err = s.storage.VerifyFile(volume, filePath, size, BitrotAlgorithmFromString(algoStr), hash, int64(shardSize))
+	t2 := time.Now()
+	if t2.Sub(t1) > 5*time.Second {
+		fmt.Println("storageRESTServer VerifyFile call > 5 secs :", s.storage.String())
+	}
 	<-doneCh
 	vresp := &VerifyFileResp{}
 	if err != nil {

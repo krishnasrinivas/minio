@@ -23,6 +23,7 @@ import (
 	"crypto/tls"
 	"encoding/gob"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/url"
@@ -30,6 +31,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/minio/minio/cmd/http"
 	"github.com/minio/minio/cmd/logger"
@@ -125,7 +127,21 @@ func (client *storageRESTClient) call(method string, values url.Values, body io.
 		values = make(url.Values)
 	}
 	values.Set(storageRESTDiskID, client.diskID)
+	t1 := time.Now()
 	respBody, err := client.restClient.Call(method, values, body, length)
+	t2 := time.Now()
+	if t2.Sub(t1) > 5*time.Second {
+		fmt.Println("storageRESTClient call > 5 secs :", client.endpoint, method, values)
+	}
+	if err != nil {
+		// Two case for which disks are marked offline
+		if nerr, ok := err.(*rest.NetworkError); ok {
+			fmt.Println("storageRESTClient network error", client.endpoint, method, values, nerr)
+		}
+		if err.Error() == errDiskStale.Error() {
+			fmt.Println("storageRESTClient got errDiskStale on", client.endpoint, method, values, err)
+		}
+	}
 	if err == nil {
 		return respBody, nil
 	}
@@ -473,6 +489,9 @@ func (client *storageRESTClient) VerifyFile(volume, path string, size int64, alg
 
 // Close - marks the client as closed.
 func (client *storageRESTClient) Close() error {
+	if client.diskID != "" {
+		fmt.Println("Close() called on ", client.endpoint, client.diskID)
+	}
 	atomic.StoreInt32(&client.connected, 0)
 	client.restClient.Close()
 	return nil

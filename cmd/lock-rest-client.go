@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"sync/atomic"
 	"time"
@@ -70,7 +71,17 @@ func (client *lockRESTClient) call(method string, values url.Values, body io.Rea
 		values = make(url.Values)
 	}
 
+	t1 := time.Now()
 	respBody, err = client.restClient.Call(method, values, body, length)
+	t2 := time.Now()
+	if t2.Sub(t1) > 5*time.Second {
+		fmt.Println("lockRESTClient call > 5 secs :", client.endpoint, method, values)
+	}
+	if err != nil {
+		if nerr, ok := err.(*rest.NetworkError); ok {
+			fmt.Println("lockRESTClient network error", client.endpoint, method, values, nerr)
+		}
+	}
 	if err == nil {
 		return respBody, nil
 	}
