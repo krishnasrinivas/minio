@@ -18,6 +18,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 
@@ -32,6 +33,7 @@ type parallelReader struct {
 	shardSize     int64
 	shardFileSize int64
 	buf           [][]byte
+	errs          []error
 }
 
 // newParallelReader returns parallelReader.
@@ -43,6 +45,7 @@ func newParallelReader(readers []io.ReaderAt, e Erasure, offset, totalLength int
 		e.ShardSize(),
 		e.ShardFileSize(totalLength),
 		make([][]byte, len(readers)),
+		make([]error, len(readers)),
 	}
 }
 
@@ -58,7 +61,7 @@ func (p *parallelReader) canDecode(buf [][]byte) bool {
 }
 
 // Read reads from readers in parallel. Returns p.dataBlocks number of bufs.
-func (p *parallelReader) Read() ([][]byte, error) {
+func (p *parallelReader) Read(ctx context.Context) ([][]byte, error) {
 	newBuf := make([][]byte, len(p.readers))
 	var newBufLK sync.RWMutex
 
@@ -109,6 +112,7 @@ func (p *parallelReader) Read() ([][]byte, error) {
 			p.buf[i] = p.buf[i][:p.shardSize]
 			_, err := disk.ReadAt(p.buf[i], p.offset)
 			if err != nil {
+				p.errs[i] = err
 				p.readers[i] = nil
 				// Since ReadAt returned error, trigger another read.
 				readTriggerCh <- true
@@ -129,6 +133,10 @@ func (p *parallelReader) Read() ([][]byte, error) {
 		return newBuf, nil
 	}
 
+	logger.LogIf(ctx, errXLReadQuorum)
+	for i, e := range p.errs {
+		fmt.Println("ReadAt failed", i, e)
+	}
 	return nil, errXLReadQuorum
 }
 
@@ -171,7 +179,7 @@ func (e Erasure) Decode(ctx context.Context, writer io.Writer, readers []io.Read
 		if blockLength == 0 {
 			break
 		}
-		bufs, err := reader.Read()
+		bufs, err := reader.Read(ctx)
 		if err != nil {
 			return err
 		}

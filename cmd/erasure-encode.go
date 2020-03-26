@@ -18,6 +18,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"sync"
@@ -66,7 +67,14 @@ func (p *parallelWriter) Write(ctx context.Context, blocks [][]byte) error {
 	if nilCount >= p.writeQuorum {
 		return nil
 	}
-	return reduceWriteQuorumErrs(ctx, p.errs, objectOpIgnoredErrs, p.writeQuorum)
+	err := reduceWriteQuorumErrs(ctx, p.errs, objectOpIgnoredErrs, p.writeQuorum)
+	if err != nil {
+		logger.LogIf(ctx, err)
+		for i, e := range p.errs {
+			fmt.Println("Write() failed", i, e)
+		}
+	}
+	return err
 }
 
 // Encode reads from the reader, erasure-encodes the data and writes to the writers.
@@ -97,7 +105,6 @@ func (e *Erasure) Encode(ctx context.Context, src io.Reader, writers []io.Writer
 		}
 
 		if err = writer.Write(ctx, blocks); err != nil {
-			logger.LogIf(ctx, err)
 			return 0, err
 		}
 		total += int64(n)

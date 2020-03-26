@@ -204,6 +204,9 @@ func IsNetworkOrHostDown(err error) bool {
 	} else if strings.Contains(err.Error(), "connection timed out") {
 		// If err is a net.Dial timeout.
 		ok = true
+	} else if strings.Contains(err.Error(), "connection reset by peer") {
+		// If err is - tcp connection reset by peer.
+		ok = true
 	} else if strings.Contains(strings.ToLower(err.Error()), "503 service unavailable") {
 		// Denial errors
 		ok = true

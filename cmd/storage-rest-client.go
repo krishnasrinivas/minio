@@ -55,7 +55,7 @@ func toStorageErr(err error) error {
 	}
 
 	if isNetworkError(err) {
-		return errDiskNotFound
+		return err
 	}
 
 	switch err.Error() {
