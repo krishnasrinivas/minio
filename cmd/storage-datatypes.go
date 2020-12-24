@@ -120,6 +120,11 @@ type FileInfo struct {
 	// TransitionStatus is set to Pending/Complete for transitioned
 	// entries based on state of transition
 	TransitionStatus string
+	// TransitionedObjName is the object name on the remote tier corresponding
+	// to object (version) on the source tier.
+	TransitionedObjName string
+	// TransitionStorageClass is the storage class label assigned to remote tier.
+	TransitionStorageClass string
 
 	// DataDir of the file
 	DataDir string

@@ -968,7 +968,6 @@ func (s *xlStorage) DeleteVersion(ctx context.Context, volume, path string, fi F
 	if !lastVersion || fi.TransitionStatus != "" {
 		return s.WriteAll(ctx, volume, pathJoin(path, xlStorageFormatFile), buf)
 	}
-
 	// Delete the meta file, if there are no more versions the
 	// top level parent is automatically removed.
 	filePath := pathJoin(volumeDir, path, xlStorageFormatFile)

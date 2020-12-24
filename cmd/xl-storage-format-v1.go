@@ -176,16 +176,22 @@ func (c *ChecksumInfo) UnmarshalJSON(data []byte) error {
 }
 
 // constant and shouldn't be changed.
-const legacyDataDir = "legacy"
+const (
+	legacyDataDir = "legacy"
+)
 
 func (m *xlMetaV1Object) ToFileInfo(volume, path string) (FileInfo, error) {
 	if !m.valid() {
 		return FileInfo{}, errFileCorrupt
 	}
-	var transitionStatus string
-	if st, ok := m.Meta[ReservedMetadataPrefixLower+"transition-status"]; ok {
+	var transitionStatus, transitionedObj string
+	if st, ok := m.Meta[ReservedMetadataPrefixLower+TransitionStatus]; ok {
 		transitionStatus = st
 	}
+	if o, ok := m.Meta[ReservedMetadataPrefixLower+TransitionedObjectName]; ok {
+		transitionedObj = o
+	}
+
 	fi := FileInfo{
 		Volume:    volume,
 		Name:      path,
@@ -199,6 +205,8 @@ func (m *xlMetaV1Object) ToFileInfo(volume, path string) (FileInfo, error) {
 	}
 	if transitionStatus != "" {
 		fi.TransitionStatus = transitionStatus
+		fi.TransitionedObjName = transitionedObj
+		fi.TransitionStorageClass = m.Meta[ReservedMetadataPrefixLower+TransitionStorageClass]
 	}
 	return fi, nil
 }

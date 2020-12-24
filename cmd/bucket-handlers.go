@@ -453,6 +453,8 @@ func (api objectAPIHandlers) DeleteMultipleObjectsHandler(w http.ResponseWriter,
 		}
 		if hasLifecycleConfig && gerr == nil {
 			object.PurgeTransitioned = goi.TransitionStatus
+			object.TransitionedObjName = goi.transitionedObjName
+			object.TransitionSC = goi.TransitionStorageClass
 		}
 		if replicateDeletes {
 			delMarker, replicate := checkReplicateDelete(ctx, bucket, ObjectToDelete{
@@ -515,6 +517,8 @@ func (api objectAPIHandlers) DeleteMultipleObjectsHandler(w http.ResponseWriter,
 			VersionPurgeStatus:            dObjects[i].VersionPurgeStatus,
 			DeleteMarkerReplicationStatus: dObjects[i].DeleteMarkerReplicationStatus,
 			PurgeTransitioned:             dObjects[i].PurgeTransitioned,
+			TransitionedObjName:           dObjects[i].TransitionedObjName,
+			TransitionSC:                  dObjects[i].TransitionSC,
 		}]
 		if errs[i] == nil || isErrObjectNotFound(errs[i]) || isErrVersionNotFound(errs[i]) {
 			if replicateDeletes {
@@ -557,17 +561,25 @@ func (api objectAPIHandlers) DeleteMultipleObjectsHandler(w http.ResponseWriter,
 		}
 
 		if hasLifecycleConfig && dobj.PurgeTransitioned == lifecycle.TransitionComplete { // clean up transitioned tier
-			action := lifecycle.DeleteAction
-			if dobj.VersionID != "" {
-				action = lifecycle.DeleteVersionAction
+			delTier := false
+			switch {
+			case dobj.VersionID != "":
+				delTier = true
+			case !globalBucketVersioningSys.Enabled(bucket):
+				delTier = true
 			}
-			deleteTransitionedObject(ctx, newObjectLayerFn(), bucket, dobj.ObjectName, lifecycle.ObjectOpts{
-				Name:         dobj.ObjectName,
-				VersionID:    dobj.VersionID,
-				DeleteMarker: dobj.DeleteMarker,
-			}, action, true)
+			if delTier {
+				action := lifecycle.DeleteAction
+				if dobj.VersionID != "" {
+					action = lifecycle.DeleteVersionAction
+				}
+				deleteTransitionedObject(ctx, newObjectLayerFn(), bucket, dobj.ObjectName, lifecycle.ObjectOpts{
+					Name:         dobj.ObjectName,
+					VersionID:    dobj.VersionID,
+					DeleteMarker: dobj.DeleteMarker,
+				}, action, dobj.TransitionedObjName, dobj.TransitionSC, false)
+			}
 		}
-
 	}
 	// Notify deleted event for objects.
 	for _, dobj := range deletedObjects {

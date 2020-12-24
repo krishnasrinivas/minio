@@ -462,11 +462,12 @@ func replicateObject(ctx context.Context, objInfo ObjectInfo, objectAPI ObjectLa
 	}
 	r := bandwidth.NewMonitoredReader(ctx, globalBucketMonitor, objInfo.Bucket, objInfo.Name, gr, headerSize, b, target.BandwidthLimit)
 	if rtype == replicateAll {
-		_, err = tgt.PutObject(ctx, dest.Bucket, object, r, size, "", "", putOpts)
+		_, err = tgt.PutObject(ctx, dest.Bucket, object, r, size, putOpts)
 	} else {
 		// replicate metadata for object tagging/copy with metadata replacement
 		dstOpts := miniogo.PutObjectOptions{Internal: miniogo.AdvancedPutOptions{SourceVersionID: objInfo.VersionID}}
-		_, err = tgt.CopyObject(ctx, dest.Bucket, object, dest.Bucket, object, getCopyObjMetadata(objInfo, dest), dstOpts)
+		c := &miniogo.Core{Client: tgt.Client}
+		_, err = c.CopyObject(ctx, dest.Bucket, object, dest.Bucket, object, getCopyObjMetadata(objInfo, dest), dstOpts)
 	}
 
 	r.Close()

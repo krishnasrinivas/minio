@@ -50,8 +50,15 @@ type ObjectOptions struct {
 	CheckPrecondFn                CheckPreconditionFn    // only set during GetObject/HeadObject/CopyObjectPart preconditional valuation
 	DeleteMarkerReplicationStatus string                 // Is only set in DELETE operations
 	VersionPurgeStatus            VersionPurgeStatusType // Is only set in DELETE operations for delete marker version to be permanently deleted.
-	TransitionStatus              string                 // status of the transition
-	NoLock                        bool                   // indicates to lower layers if the caller is expecting to hold locks.
+	Transition                    TransitionOptions
+	TransitionStatus              string // status of the transition
+	NoLock                        bool   // indicates to lower layers if the caller is expecting to hold locks.
+}
+
+// TransitionOptions represents object options for transition ObjectLayer operation
+type TransitionOptions struct {
+	Status       string
+	StorageClass string
 }
 
 // BucketOptions represents bucket options for ObjectLayer bucket operations
@@ -110,7 +117,7 @@ type ObjectLayer interface {
 	CopyObject(ctx context.Context, srcBucket, srcObject, destBucket, destObject string, srcInfo ObjectInfo, srcOpts, dstOpts ObjectOptions) (objInfo ObjectInfo, err error)
 	DeleteObject(ctx context.Context, bucket, object string, opts ObjectOptions) (ObjectInfo, error)
 	DeleteObjects(ctx context.Context, bucket string, objects []ObjectToDelete, opts ObjectOptions) ([]DeletedObject, []error)
-
+	TransitionObject(ctx context.Context, bucket, object string, opts ObjectOptions) error
 	// Multipart operations.
 	ListMultipartUploads(ctx context.Context, bucket, prefix, keyMarker, uploadIDMarker, delimiter string, maxUploads int) (result ListMultipartsInfo, err error)
 	NewMultipartUpload(ctx context.Context, bucket, object string, opts ObjectOptions) (uploadID string, err error)

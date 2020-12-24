@@ -254,3 +254,8 @@ func (a GatewayUnsupported) IsCompressionSupported() bool {
 func (a GatewayUnsupported) Health(_ context.Context, _ HealthOptions) HealthResult {
 	return HealthResult{}
 }
+
+// TransitionObject - transition object content to target tier.
+func (a GatewayUnsupported) TransitionObject(ctx context.Context, bucket, object string, opts ObjectOptions) error {
+	return NotImplemented{}
+}

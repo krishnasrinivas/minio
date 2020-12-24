@@ -310,7 +310,6 @@ func (er erasureObjects) healObject(ctx context.Context, bucket string, object s
 		// File is fully gone, fileInfo is empty.
 		return defaultHealResult(FileInfo{}, storageDisks, storageEndpoints, errs, bucket, object, versionID), err
 	}
-
 	// If less than read quorum number of disks have all the parts
 	// of the data, we can't reconstruct the erasure-coded data.
 	if numAvailableDisks < dataBlocks {
@@ -501,6 +500,7 @@ func (er erasureObjects) healObjectDir(ctx context.Context, bucket, object strin
 	errs := statAllDirs(ctx, storageDisks, bucket, object)
 	danglingObject := isObjectDirDangling(errs)
 	if danglingObject {
+		fmt.Println("dangline obj..", errs, object)
 		if !dryRun && remove {
 			var wg sync.WaitGroup
 			// Remove versions in bulk for each disk
@@ -683,7 +683,6 @@ func (er erasureObjects) purgeObjectDangling(ctx context.Context, bucket, object
 
 	storageDisks := er.getDisks()
 	storageEndpoints := er.getEndpoints()
-
 	// Check if the object is dangling, if yes and user requested
 	// remove we simply delete it from namespace.
 	m, ok := isObjectDangling(metaArr, errs, dataErrs)

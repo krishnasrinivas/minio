@@ -37,6 +37,10 @@ type DeletedObject struct {
 	VersionPurgeStatus VersionPurgeStatusType `xml:"VersionPurgeStatus,omitempty"`
 	// PurgeTransitioned is nonempty if object is in transition tier
 	PurgeTransitioned string `xml:"PurgeTransitioned,omitempty"`
+	// TransitionedObjName is the name of the object on transition tier
+	TransitionedObjName string `xml:"TransitionedObjName,omitempty"`
+	// TransitionSC is the transition storage class in use for this object version
+	TransitionSC string `xml:"TransitionSC,omitempty"`
 }
 
 // DeleteMarkerMTime is an embedded type containing time.Time for XML marshal
@@ -65,6 +69,10 @@ type ObjectToDelete struct {
 	DeleteMarkerVersionID string `xml:"DeleteMarkerVersionId"`
 	// PurgeTransitioned is nonempty if object is in transition tier
 	PurgeTransitioned string `xml:"PurgeTransitioned"`
+	// TransitionedObjName is the name of the object on transition tier
+	TransitionedObjName string `xml:"TransitionedObjName"`
+	// TransitionSC is the transition storage class in use for this object version
+	TransitionSC string `xml:"TransitionSC"`
 }
 
 // createBucketConfiguration container for bucket configuration request from client.

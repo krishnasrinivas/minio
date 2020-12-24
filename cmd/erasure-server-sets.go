@@ -1581,3 +1581,32 @@ func (z *erasureServerPools) GetObjectTags(ctx context.Context, bucket, object s
 		Object: object,
 	}
 }
+
+// TransitionObject - transition object content to target tier.
+func (z *erasureServerPools) TransitionObject(ctx context.Context, bucket, object string, opts ObjectOptions) error {
+	object = encodeDirObject(object)
+	if z.SingleZone() {
+		return z.serverPools[0].TransitionObject(ctx, bucket, object, opts)
+	}
+
+	for _, pool := range z.serverPools {
+		if err := pool.TransitionObject(ctx, bucket, object, opts); err != nil {
+			if isErrObjectNotFound(err) || isErrVersionNotFound(err) {
+				continue
+			}
+			return err
+		}
+		return nil
+	}
+	if opts.VersionID != "" {
+		return VersionNotFound{
+			Bucket:    bucket,
+			Object:    object,
+			VersionID: opts.VersionID,
+		}
+	}
+	return ObjectNotFound{
+		Bucket: bucket,
+		Object: object,
+	}
+}

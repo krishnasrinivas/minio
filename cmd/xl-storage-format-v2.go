@@ -426,8 +426,14 @@ func (j xlMetaV2Object) ToFileInfo(volume, path string) (FileInfo, error) {
 	}
 	fi.DataDir = uuid.UUID(j.DataDir).String()
 
-	if st, ok := j.MetaSys[ReservedMetadataPrefixLower+"transition-status"]; ok {
+	if st, ok := j.MetaSys[ReservedMetadataPrefixLower+TransitionStatus]; ok {
 		fi.TransitionStatus = string(st)
+	}
+	if o, ok := j.MetaSys[ReservedMetadataPrefixLower+TransitionedObjectName]; ok {
+		fi.TransitionedObjName = string(o)
+	}
+	if sc, ok := j.MetaSys[ReservedMetadataPrefixLower+TransitionStorageClass]; ok {
+		fi.TransitionStorageClass = string(sc)
 	}
 	return fi, nil
 }
@@ -499,7 +505,9 @@ func (z *xlMetaV2) DeleteVersion(fi FileInfo) (string, bool, error) {
 		case LegacyType:
 			if version.ObjectV1.VersionID == fi.VersionID {
 				if fi.TransitionStatus != "" {
-					z.Versions[i].ObjectV1.Meta[ReservedMetadataPrefixLower+"transition-status"] = fi.TransitionStatus
+					z.Versions[i].ObjectV1.Meta[ReservedMetadataPrefixLower+TransitionStatus] = fi.TransitionStatus
+					z.Versions[i].ObjectV1.Meta[ReservedMetadataPrefixLower+TransitionedObjectName] = fi.TransitionedObjName
+					z.Versions[i].ObjectV1.Meta[ReservedMetadataPrefixLower+TransitionStorageClass] = fi.TransitionStorageClass
 					return uuid.UUID(version.ObjectV2.DataDir).String(), len(z.Versions) == 0, nil
 				}
 
@@ -560,7 +568,9 @@ func (z *xlMetaV2) DeleteVersion(fi FileInfo) (string, bool, error) {
 		case ObjectType:
 			if bytes.Equal(version.ObjectV2.VersionID[:], uv[:]) {
 				if fi.TransitionStatus != "" {
-					z.Versions[i].ObjectV2.MetaSys[ReservedMetadataPrefixLower+"transition-status"] = []byte(fi.TransitionStatus)
+					z.Versions[i].ObjectV2.MetaSys[ReservedMetadataPrefixLower+TransitionStatus] = []byte(fi.TransitionStatus)
+					z.Versions[i].ObjectV2.MetaSys[ReservedMetadataPrefixLower+TransitionedObjectName] = []byte(fi.TransitionedObjName)
+					z.Versions[i].ObjectV2.MetaSys[ReservedMetadataPrefixLower+TransitionStorageClass] = []byte(fi.TransitionStorageClass)
 					return uuid.UUID(version.ObjectV2.DataDir).String(), len(z.Versions) == 0, nil
 				}
 				z.Versions = append(z.Versions[:i], z.Versions[i+1:]...)

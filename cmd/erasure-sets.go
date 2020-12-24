@@ -1406,10 +1406,15 @@ func (s *erasureSets) healMRFRoutine() {
 		for _, u := range mrfOperations {
 			// Send an object to background heal
 			toSourceChTimed(idler, bgSeq.sourceCh, u)
-
+			fmt.Println("mrf failure being healed........", u)
 			s.mrfMU.Lock()
 			delete(s.mrfOperations, u)
 			s.mrfMU.Unlock()
 		}
 	}
+}
+
+// TransitionObject - transition object content to target tier.
+func (s *erasureSets) TransitionObject(ctx context.Context, bucket, object string, opts ObjectOptions) error {
+	return s.getHashedSet(object).TransitionObject(ctx, bucket, object, opts)
 }
