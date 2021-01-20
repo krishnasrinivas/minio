@@ -85,6 +85,44 @@ func (config *TransitionStorageClassConfigMgr) Add(sc madmin.TransitionStorageCl
 	return nil
 }
 
+func (config *TransitionStorageClassConfigMgr) ListStorageClasses() []madmin.TransitionStorageClassConfig {
+	config.RLock()
+	defer config.RUnlock()
+
+	var storageClasses []madmin.TransitionStorageClassConfig
+	for _, cls := range config.S3 {
+		// This makes a local copy of storage-class config before
+		// passing a reference to it.
+		storageClass := cls
+		storageClasses = append(storageClasses, madmin.TransitionStorageClassConfig{
+			Type: madmin.S3,
+			S3:   &storageClass,
+		})
+	}
+
+	for _, cls := range config.Azure {
+		// This makes a local copy of storage-class config before
+		// passing a reference to it.
+		storageClass := cls
+		storageClasses = append(storageClasses, madmin.TransitionStorageClassConfig{
+			Type:  madmin.Azure,
+			Azure: &storageClass,
+		})
+	}
+
+	for _, cls := range config.GCS {
+		// This makes a local copy of storage-class config before
+		// passing a reference to it.
+		storageClass := cls
+		storageClasses = append(storageClasses, madmin.TransitionStorageClassConfig{
+			Type: madmin.GCS,
+			GCS:  &storageClass,
+		})
+	}
+
+	return storageClasses
+}
+
 func (config *TransitionStorageClassConfigMgr) Edit(sc madmin.TransitionStorageClassConfig) error {
 	config.Lock()
 	defer config.Unlock()
@@ -159,7 +197,7 @@ func (config *TransitionStorageClassConfigMgr) GetDriver(sc string) (d warmBacke
 }
 
 func saveGlobalTransitionStorageClassConfig() error {
-	b, err := json.Marshal(globalTransitionStorageClassConfigMgr)
+	b, err := globalTransitionStorageClassConfigMgr.Bytes()
 	if err != nil {
 		return err
 	}

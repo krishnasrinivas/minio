@@ -24,6 +24,7 @@ type TransitionStorageClassAzure struct {
 	SecretKey string
 	Bucket    string
 	Prefix    string
+	Region    string
 }
 
 type AzureOptions func(*TransitionStorageClassAzure) error
@@ -42,6 +43,13 @@ func AzureEndpoint(endpoint string) func(az *TransitionStorageClassAzure) error 
 	}
 }
 
+func AzureRegion(region string) func(az *TransitionStorageClassAzure) error {
+	return func(az *TransitionStorageClassAzure) error {
+		az.Region = region
+		return nil
+	}
+}
+
 func NewTransitionStorageClassAzure(name, accessKey, secretKey, bucket string, options ...AzureOptions) (*TransitionStorageClassAzure, error) {
 	az := &TransitionStorageClassAzure{
 		Name:      name,
@@ -51,6 +59,7 @@ func NewTransitionStorageClassAzure(name, accessKey, secretKey, bucket string, o
 		// Defaults
 		Endpoint: "http://blob.core.windows.net",
 		Prefix:   "",
+		Region:   "",
 	}
 
 	for _, option := range options {

@@ -20,64 +20,11 @@ package madmin
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
 )
-
-type StorageClassType int
-
-const (
-	unsupported StorageClassType = iota
-	S3
-	Azure
-	GCS
-)
-
-func (st StorageClassType) String() string {
-	switch st {
-	case S3:
-		return "s3"
-	case Azure:
-		return "azure"
-	case GCS:
-		return "gcs"
-	}
-	return "unsupported"
-}
-
-func NewStorageClassType(scType string) (StorageClassType, error) {
-	switch scType {
-	case S3.String():
-		return S3, nil
-	case Azure.String():
-		return Azure, nil
-	case GCS.String():
-		return GCS, nil
-	}
-
-	return unsupported, errors.New("Unsupported storage class type")
-}
-
-type TransitionStorageClassConfig struct {
-	Type  StorageClassType
-	S3    *TransitionStorageClassS3
-	Azure *TransitionStorageClassAzure
-	GCS   *TransitionStorageClassGCS
-}
-
-func (cfg *TransitionStorageClassConfig) Name() string {
-	switch cfg.Type {
-	case S3:
-		return cfg.S3.Name
-	case Azure:
-		return cfg.Azure.Name
-	case GCS:
-		return cfg.Azure.Name
-	}
-	panic("unexpected transition storage-class type")
-}
 
 const StorageClassAPI = "transition-storage-class"
 
@@ -97,7 +44,8 @@ func (adm *AdminClient) AddStorageClass(ctx context.Context, cfg TransitionStora
 		content:     data,
 	}
 
-	// Execute PUT on /minio/admin/v3/transition-storage-class?add to add a transition storage-class.
+	// Execute PUT on /minio/admin/v3/transition-storage-class?add to add a
+	// transition storage-class.
 	resp, err := adm.executeMethod(ctx, http.MethodPut, reqData)
 	defer closeResponse(resp)
 	if err != nil {
@@ -108,4 +56,35 @@ func (adm *AdminClient) AddStorageClass(ctx context.Context, cfg TransitionStora
 		return httpRespToErrorResponse(resp)
 	}
 	return nil
+}
+
+func (adm *AdminClient) ListStorageClasses(ctx context.Context) ([]TransitionStorageClassConfig, error) {
+	reqData := requestData{
+		relPath: strings.Join([]string{adminAPIPrefix, StorageClassAPI}, "/"),
+	}
+
+	// Execute GET on /minio/admin/v3/transition-storage-class to list
+	// transition storage-classes configured.
+	resp, err := adm.executeMethod(ctx, http.MethodGet, reqData)
+	defer closeResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, httpRespToErrorResponse(resp)
+	}
+
+	var storageClasses []TransitionStorageClassConfig
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return storageClasses, err
+	}
+
+	err = json.Unmarshal(b, &storageClasses)
+	if err != nil {
+		return storageClasses, err
+	}
+
+	return storageClasses, nil
 }

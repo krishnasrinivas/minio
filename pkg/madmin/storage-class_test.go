@@ -110,6 +110,7 @@ func TestAzStorageClass(t *testing.T) {
 	endpoint := "https://myazure.com"
 	accessKey, secretKey := "accessKey", "secretKey"
 	bucket, prefix := "testbucket", "testprefix"
+	region := "us-east-1"
 	want := &TransitionStorageClassAzure{
 		Name:      scName,
 		AccessKey: accessKey,
@@ -119,10 +120,12 @@ func TestAzStorageClass(t *testing.T) {
 		// custom values
 		Endpoint: endpoint,
 		Prefix:   prefix,
+		Region:   region,
 	}
 	options := []AzureOptions{
 		AzureEndpoint(endpoint),
 		AzurePrefix(prefix),
+		AzureRegion(region),
 	}
 	got, err := NewTransitionStorageClassAzure(scName, accessKey, secretKey, bucket, options...)
 	if err != nil {

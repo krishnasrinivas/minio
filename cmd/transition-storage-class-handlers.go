@@ -93,11 +93,13 @@ func (api adminAPIHandlers) ListStorageClassHandler(w http.ResponseWriter, r *ht
 		return
 	}
 
-	data, err := globalTransitionStorageClassConfigMgr.Bytes()
+	storageClasses := globalTransitionStorageClassConfigMgr.ListStorageClasses()
+	data, err := json.Marshal(storageClasses)
 	if err != nil {
 		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
 		return
 	}
+
 	writeSuccessResponseJSON(w, data)
 }
 
