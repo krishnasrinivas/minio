@@ -200,6 +200,21 @@ func setObjectHeaders(w http.ResponseWriter, objInfo ObjectInfo, rs *HTTPRangeSp
 				w.Header()[xhttp.AmzStorageClass] = []string{objInfo.TransitionStorageClass}
 			}
 		}
+		ruleID, transitionTime := lc.PredictTransitionTime(lifecycle.ObjectOpts{
+			Name:             objInfo.Name,
+			UserTags:         objInfo.UserTags,
+			VersionID:        objInfo.VersionID,
+			ModTime:          objInfo.ModTime,
+			IsLatest:         objInfo.IsLatest,
+			DeleteMarker:     objInfo.DeleteMarker,
+			TransitionStatus: objInfo.TransitionStatus,
+		})
+		if !transitionTime.IsZero() {
+			w.Header()[xhttp.MinIOTransition] = []string{
+				fmt.Sprintf(`transition-date="%s", rule-id="%s"`, transitionTime.Format(http.TimeFormat), ruleID),
+			}
+		}
+
 	}
 
 	return nil

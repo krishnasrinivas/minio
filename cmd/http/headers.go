@@ -163,6 +163,8 @@ const (
 	MinIODeleteReplicationStatus = "X-Minio-Replication-Delete-Status"
 	// Header indicates delete-marker replication status.
 	MinIODeleteMarkerReplicationStatus = "X-Minio-Replication-DeleteMarker-Status"
+	// Object date/time of expiration
+	MinIOTransition = "x-minio-transition"
 )
 
 // Common http query params S3 API
