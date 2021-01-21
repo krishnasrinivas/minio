@@ -3527,7 +3527,14 @@ func (api objectAPIHandlers) PostRestoreObjectHandler(w http.ResponseWriter, r *
 			rreq.SelectParameters.Close()
 			return
 		}
-		if err := restoreTransitionedObject(rctx, bucket, object, objectAPI, objInfo, rreq, restoreExpiry); err != nil {
+		opts := ObjectOptions{
+			Transition: TransitionOptions{
+				RestoreRequest: rreq,
+				RestoreExpiry:  restoreExpiry,
+			},
+			VersionID: objInfo.VersionID,
+		}
+		if err := objectAPI.RestoreTransitionedObject(rctx, bucket, object, opts); err != nil {
 			return
 		}
 

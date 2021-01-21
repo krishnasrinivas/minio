@@ -605,7 +605,7 @@ func NewGetObjectReader(rs *HTTPRangeSpec, oi ObjectInfo, opts ObjectOptions, cl
 		return nil, 0, 0, err
 	}
 	// if object is encrypted, transition content without decrypting.
-	if opts.TransitionStatus == lifecycle.TransitionPending && isEncrypted {
+	if opts.Transition.Status == lifecycle.TransitionPending && isEncrypted {
 		isEncrypted = false
 	}
 	var skipLen int64

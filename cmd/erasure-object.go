@@ -32,6 +32,7 @@ import (
 	"github.com/minio/minio/pkg/bucket/lifecycle"
 	"github.com/minio/minio/pkg/bucket/replication"
 	"github.com/minio/minio/pkg/event"
+	"github.com/minio/minio/pkg/hash"
 	"github.com/minio/minio/pkg/mimedb"
 	"github.com/minio/minio/pkg/sync/errgroup"
 )
@@ -1041,7 +1042,6 @@ func (er erasureObjects) DeleteObject(ctx context.Context, bucket, object string
 		ModTime:                       modTime,
 		DeleteMarkerReplicationStatus: opts.DeleteMarkerReplicationStatus,
 		VersionPurgeStatus:            opts.VersionPurgeStatus,
-		//	TransitionStatus:              opts.Transition.Status,
 	}); err != nil {
 		return objInfo, toObjectErr(err, bucket, object)
 	}
@@ -1230,7 +1230,10 @@ func (er erasureObjects) TransitionObject(ctx context.Context, bucket, object st
 		// Make sure to return object info to provide extra information.
 		return toObjectErr(errMethodNotAllowed, bucket, object)
 	}
-
+	// verify that the object queued for transition is identical to that on disk.
+	if !opts.MTime.Equal(fi.ModTime) || !strings.EqualFold(opts.Transition.ETag, extractETag(fi.Metadata)) {
+		return toObjectErr(errFileNotFound, bucket, object)
+	}
 	pr, pw := io.Pipe()
 	go func() {
 		err := er.getObjectWithFileInfo(ctx, bucket, object, 0, fi.Size, pw, fi, metaArr, onlineDisks)
@@ -1281,4 +1284,41 @@ func (er erasureObjects) TransitionObject(ctx context.Context, bucket, object st
 		Host: "Internal: [ILM-Transition]",
 	})
 	return err
+}
+
+// RestoreTransitionedObject - restore transitioned object content locally on this cluster.
+// This is similar to PostObjectRestore from AWS GLACIER
+// storage class. When PostObjectRestore API is called, a temporary copy of the object
+// is restored locally to the bucket on source cluster until the restore expiry date.
+// The copy that was transitioned continues to reside in the transitioned tier.
+func (er erasureObjects) RestoreTransitionedObject(ctx context.Context, bucket, object string, opts ObjectOptions) error {
+	// Acquire a write lock before deleting the object.
+	lk := er.NewNSLock(bucket, object)
+	if err := lk.GetLock(ctx, globalDeleteOperationTimeout); err != nil {
+		return err
+	}
+	defer lk.Unlock()
+	oi, err := er.getObjectInfo(ctx, bucket, object, opts)
+	if err != nil {
+		return err
+	}
+	var rs *HTTPRangeSpec
+	gr, err := getTransitionedObjectReader(ctx, bucket, object, rs, http.Header{}, oi, ObjectOptions{
+		VersionID: oi.VersionID})
+	if err != nil {
+		return err
+	}
+	defer gr.Close()
+	hashReader, err := hash.NewReader(gr, oi.Size, "", "", oi.Size, globalCLIContext.StrictS3Compat)
+	if err != nil {
+		return err
+	}
+	pReader := NewPutObjReader(hashReader, nil, nil)
+	ropts := putRestoreOpts(bucket, object, opts.Transition.RestoreRequest, oi)
+	ropts.UserDefined[xhttp.AmzRestore] = fmt.Sprintf("ongoing-request=%t, expiry-date=%s", false, opts.Transition.RestoreExpiry.Format(http.TimeFormat))
+	ropts.NoLock = true
+	if _, err := er.PutObject(ctx, bucket, object, pReader, ropts); err != nil {
+		return err
+	}
+	return nil
 }

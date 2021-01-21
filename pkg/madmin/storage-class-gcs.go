@@ -51,13 +51,13 @@ func (gcs *TransitionStorageClassGCS) GetCredentialJSON() ([]byte, error) {
 func NewTransitionStorageClassGCS(name string, credsJSON []byte, bucket string, options ...GCSOptions) (*TransitionStorageClassGCS, error) {
 	creds := base64.URLEncoding.EncodeToString(credsJSON)
 	gcs := &TransitionStorageClassGCS{
-		Name:   name,
-		Creds:  creds,
-		Bucket: bucket,
+		Name:     name,
+		Creds:    creds,
+		Bucket:   bucket,
+		endpoint: "https://storage.googleapis.com",
 		// Defaults
-		endpoint: "https://storage.googleapis.com/storage/v1/", // endpoint is meant only for client-side display purposes
-		Prefix:   "",
-		Region:   "",
+		Prefix: "",
+		Region: "",
 	}
 
 	for _, option := range options {
