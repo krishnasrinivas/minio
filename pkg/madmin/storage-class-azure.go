@@ -18,13 +18,14 @@
 package madmin
 
 type TransitionStorageClassAzure struct {
-	Name      string
-	Endpoint  string
-	AccessKey string
-	SecretKey string
-	Bucket    string
-	Prefix    string
-	Region    string
+	Name         string
+	Endpoint     string
+	AccessKey    string
+	SecretKey    string
+	Bucket       string
+	Prefix       string
+	Region       string
+	StorageClass string
 }
 
 type AzureOptions func(*TransitionStorageClassAzure) error
@@ -50,6 +51,13 @@ func AzureRegion(region string) func(az *TransitionStorageClassAzure) error {
 	}
 }
 
+func AzureStorageClass(sc string) func(az *TransitionStorageClassAzure) error {
+	return func(az *TransitionStorageClassAzure) error {
+		az.StorageClass = sc
+		return nil
+	}
+}
+
 func NewTransitionStorageClassAzure(name, accessKey, secretKey, bucket string, options ...AzureOptions) (*TransitionStorageClassAzure, error) {
 	az := &TransitionStorageClassAzure{
 		Name:      name,
@@ -57,9 +65,10 @@ func NewTransitionStorageClassAzure(name, accessKey, secretKey, bucket string, o
 		SecretKey: secretKey,
 		Bucket:    bucket,
 		// Defaults
-		Endpoint: "http://blob.core.windows.net",
-		Prefix:   "",
-		Region:   "",
+		Endpoint:     "http://blob.core.windows.net",
+		Prefix:       "",
+		Region:       "",
+		StorageClass: "",
 	}
 
 	for _, option := range options {

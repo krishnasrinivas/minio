@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"strings"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/minio/minio/pkg/madmin"
@@ -26,10 +27,22 @@ func (az *warmBackendAzure) getDest(object string) string {
 	}
 	return destObj
 }
+func (az *warmBackendAzure) tier() azblob.AccessTierType {
+	for _, t := range azblob.PossibleAccessTierTypeValues() {
+		if strings.ToLower(az.StorageClass) == strings.ToLower(string(t)) {
+			return t
+		}
+	}
+	return azblob.AccessTierType("")
+}
 func (az *warmBackendAzure) Put(ctx context.Context, object string, r io.Reader, length int64) error {
 	blobURL := az.serviceURL.NewContainerURL(az.Bucket).NewBlockBlobURL(az.getDest(object))
-	//TODO: set storage class
-
+	// set tier if specified -
+	if az.StorageClass != "" {
+		if _, err := blobURL.SetTier(ctx, az.tier(), azblob.LeaseAccessConditions{}); err != nil {
+			return err
+		}
+	}
 	_, err := azblob.UploadStreamToBlockBlob(ctx, r, blobURL, azblob.UploadStreamToBlockBlobOptions{})
 	return err
 }
@@ -63,9 +76,9 @@ func newWarmBackendAzure(conf madmin.TransitionStorageClassAzure) (*warmBackendA
 	u, _ := url.Parse(fmt.Sprintf("https://%s.blob.core.windows.net", conf.AccessKey))
 	serviceURL := azblob.NewServiceURL(*u, p)
 	return &warmBackendAzure{
-		serviceURL: serviceURL,
-		Bucket:     conf.Bucket,
-		Prefix:     conf.Prefix,
-		//StorageClass: conf.StorageClass, why missing?
+		serviceURL:   serviceURL,
+		Bucket:       conf.Bucket,
+		Prefix:       conf.Prefix,
+		StorageClass: conf.StorageClass,
 	}, nil
 }

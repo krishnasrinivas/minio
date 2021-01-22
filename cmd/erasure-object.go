@@ -1292,7 +1292,7 @@ func (er erasureObjects) TransitionObject(ctx context.Context, bucket, object st
 // is restored locally to the bucket on source cluster until the restore expiry date.
 // The copy that was transitioned continues to reside in the transitioned tier.
 func (er erasureObjects) RestoreTransitionedObject(ctx context.Context, bucket, object string, opts ObjectOptions) error {
-	// Acquire a write lock before deleting the object.
+	// Acquire a write lock before restoring the object.
 	lk := er.NewNSLock(bucket, object)
 	if err := lk.GetLock(ctx, globalDeleteOperationTimeout); err != nil {
 		return err

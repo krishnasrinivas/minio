@@ -27,7 +27,9 @@ func (gcs *warmBackendGCS) Put(ctx context.Context, key string, data io.Reader, 
 	object := gcs.client.Bucket(gcs.Bucket).Object(gcs.getDest(key))
 	//TODO: set storage class
 	w := object.NewWriter(ctx)
-
+	if gcs.StorageClass != "" {
+		w.ObjectAttrs.StorageClass = gcs.StorageClass
+	}
 	if _, err := io.Copy(w, data); err != nil {
 		return err
 	}

@@ -523,29 +523,3 @@ func parseRestoreHeaderFromMeta(meta map[string]string) (ongoing bool, expiry ti
 	}
 	return rstatusSlc[1] == "true", expiry, nil
 }
-
-// // restoreTransitionedObject is similar to PostObjectRestore from AWS GLACIER
-// // storage class. When PostObjectRestore API is called, a temporary copy of the object
-// // is restored locally to the bucket on source cluster until the restore expiry date.
-// // The copy that was transitioned continues to reside in the transitioned tier.
-// func restoreTransitionedObject(ctx context.Context, bucket, object string, objAPI ObjectLayer, objInfo ObjectInfo, opts ObjectOptions) error {
-// 	var rs *HTTPRangeSpec
-// 	gr, err := getTransitionedObjectReader(ctx, bucket, object, rs, http.Header{}, objInfo, ObjectOptions{
-// 		VersionID: objInfo.VersionID})
-// 	if err != nil {
-// 		return err
-// 	}
-// 	defer gr.Close()
-// 	hashReader, err := hash.NewReader(gr, objInfo.Size, "", "", objInfo.Size, globalCLIContext.StrictS3Compat)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	pReader := NewPutObjReader(hashReader, nil, nil)
-// 	opts := putRestoreOpts(bucket, object, rreq, objInfo)
-// 	opts.UserDefined[xhttp.AmzRestore] = fmt.Sprintf("ongoing-request=%t, expiry-date=%s", false, restoreExpiry.Format(http.TimeFormat))
-// 	if _, err := objAPI.PutObject(ctx, bucket, object, pReader, opts); err != nil {
-// 		return err
-// 	}
-
-// 	return nil
-// }

@@ -28,7 +28,6 @@ func (s3 *warmBackendS3) getDest(object string) string {
 	return destObj
 }
 func (s3 *warmBackendS3) Put(ctx context.Context, object string, r io.Reader, length int64) error {
-
 	_, err := s3.client.PutObject(ctx, s3.Bucket, s3.getDest(object), r, length, minio.PutObjectOptions{StorageClass: s3.StorageClass})
 	return err
 }
@@ -40,9 +39,7 @@ func (s3 *warmBackendS3) Get(ctx context.Context, object string, opts warmBacken
 func (s3 *warmBackendS3) Remove(ctx context.Context, object string) error {
 	return s3.client.RemoveObject(ctx, s3.Bucket, s3.getDest(object), minio.RemoveObjectOptions{})
 }
-func (s3 *warmBackendS3) GetTarget() (bucket, prefix string) {
-	return s3.Bucket, s3.Prefix
-}
+
 func newWarmBackendS3(conf madmin.TransitionStorageClassS3) (*warmBackendS3, error) {
 	u, err := url.Parse(conf.Endpoint)
 	if err != nil {
