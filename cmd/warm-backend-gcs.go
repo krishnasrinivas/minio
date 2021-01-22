@@ -45,7 +45,7 @@ func (gcs *warmBackendGCS) Get(ctx context.Context, key string, opts warmBackend
 	// Calling ReadCompressed with true accomplishes that.
 	object := gcs.client.Bucket(gcs.Bucket).Object(gcs.getDest(key)).ReadCompressed(true)
 
-	r, err = object.NewRangeReader(ctx, 0, 0)
+	r, err = object.NewRangeReader(ctx, opts.startOffset, opts.length)
 	if err != nil {
 		return nil, err
 	}

@@ -5,7 +5,10 @@ import (
 	"io"
 )
 
-type warmBackendGetOpts struct{}
+type warmBackendGetOpts struct {
+	startOffset int64
+	length      int64
+}
 
 type warmBackend interface {
 	Put(ctx context.Context, object string, r io.Reader, length int64) error

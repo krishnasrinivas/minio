@@ -48,8 +48,11 @@ func (az *warmBackendAzure) Put(ctx context.Context, object string, r io.Reader,
 }
 
 func (az *warmBackendAzure) Get(ctx context.Context, object string, opts warmBackendGetOpts) (r io.ReadCloser, err error) {
+	if opts.startOffset < 0 {
+		return nil, InvalidRange{}
+	}
 	blobURL := az.serviceURL.NewContainerURL(az.Bucket).NewBlobURL(az.getDest(object))
-	blob, err := blobURL.Download(ctx, 0, 0, azblob.BlobAccessConditions{}, false)
+	blob, err := blobURL.Download(ctx, opts.startOffset, opts.length, azblob.BlobAccessConditions{}, false)
 	if err != nil {
 		return nil, err
 	}

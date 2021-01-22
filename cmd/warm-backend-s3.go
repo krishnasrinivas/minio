@@ -33,7 +33,15 @@ func (s3 *warmBackendS3) Put(ctx context.Context, object string, r io.Reader, le
 }
 
 func (s3 *warmBackendS3) Get(ctx context.Context, object string, opts warmBackendGetOpts) (r io.ReadCloser, err error) {
-	return s3.client.GetObject(ctx, s3.Bucket, s3.getDest(object), minio.GetObjectOptions{})
+	gopts := minio.GetObjectOptions{}
+
+	if opts.startOffset >= 0 && opts.length >= 0 {
+		if err := gopts.SetRange(opts.startOffset, opts.startOffset+opts.length-1); err != nil {
+			return nil, err
+		}
+	}
+
+	return s3.client.GetObject(ctx, s3.Bucket, s3.getDest(object), gopts)
 }
 
 func (s3 *warmBackendS3) Remove(ctx context.Context, object string) error {

@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	miniogo "github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/tags"
 	xhttp "github.com/minio/minio/cmd/http"
 	"github.com/minio/minio/cmd/logger"
@@ -149,11 +148,14 @@ func validateLifecycleTransition(ctx context.Context, bucket string, lfc *lifecy
 // validateTransitionDestination returns error if transition destination bucket missing or not configured
 // It also returns true if transition destination is same as this server.
 func validateTransitionDestination(sc string) error {
-	_, err := globalTransitionStorageClassConfigMgr.GetDriver(sc)
+	client, err := globalTransitionStorageClassConfigMgr.GetDriver(sc)
 	if err != nil {
 		return err
 	}
-
+	_, err = client.Get(context.Background(), "probeobject", warmBackendGetOpts{})
+	if isErrBucketNotFound(err) || !isErrObjectNotFound(err) {
+		return err
+	}
 	//!!
 	//TODO: validate if bucket still present on the target and if target endpoint + bucket happens to be this bucket we are creating
 	// lfc config for.
@@ -165,25 +167,6 @@ func validateTransitionDestination(sc string) error {
 	// return sameTarget, arn.Bucket, nil
 	return nil
 }
-
-// return true if ARN representing transition storage class is present in a active rule
-// for the lifecycle configured on this bucket
-//TODO: ensure this is taken care of!
-// func transitionSCInUse(ctx context.Context, lfc *lifecycle.Lifecycle, bucket, arnStr string) bool {
-// 	tgtLabel := globalBucketTargetSys.GetRemoteLabelWithArn(ctx, bucket, arnStr)
-// 	if tgtLabel == "" {
-// 		return false
-// 	}
-// 	for _, rule := range lfc.Rules {
-// 		if rule.Status == Disabled {
-// 			continue
-// 		}
-// 		if rule.Transition.StorageClass != "" && rule.Transition.StorageClass == tgtLabel {
-// 			return true
-// 		}
-// 	}
-// 	return false
-// }
 
 // handle deletes of transitioned objects or object versions when one of the following is true:
 // 1. temporarily restored copies of objects (restored with the PostRestoreObject API) expired.
@@ -306,17 +289,16 @@ func getTransitionedObjectReader(ctx context.Context, bucket, object string, rs 
 	if err != nil {
 		return nil, ErrorRespToObjectError(err, bucket, object)
 	}
-	gopts := miniogo.GetObjectOptions{}
+	gopts := warmBackendGetOpts{}
 
-	// get correct offsets for encrypted object
+	// get correct offsets for object
 	if off >= 0 && length >= 0 {
-		if err := gopts.SetRange(off, off+length-1); err != nil {
-			return nil, ErrorRespToObjectError(err, bucket, object)
-		}
+		gopts.startOffset = off
+		gopts.length = length
 	}
 	//	reader, err := tgtClient.GetObject(ctx, tgtClient.Bucket, oi.transitionedObjName, gopts)
 	// TODO:needs options for range..
-	reader, err := tgtClient.Get(ctx, oi.transitionedObjName, warmBackendGetOpts{})
+	reader, err := tgtClient.Get(ctx, oi.transitionedObjName, gopts)
 
 	if err != nil {
 		return nil, err
