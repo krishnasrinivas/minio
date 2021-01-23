@@ -26,7 +26,6 @@ import (
 	"sync"
 	"time"
 
-	miniogo "github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/tags"
 	xhttp "github.com/minio/minio/cmd/http"
 	"github.com/minio/minio/cmd/logger"
@@ -389,7 +388,7 @@ func (er erasureObjects) getObjectFileInfo(ctx context.Context, bucket, object s
 				//  - This is a versioned bucket and the version ID is passed, the reason
 				//    is that we cannot fetch the ID of the latest version when we don't trust xl.meta
 				if !opts.Versioned || opts.VersionID != "" {
-					fmt.Println("removeing-dangling-objec-getofileinfo>", reducedErr, bucket, object, opts)
+					fmt.Println("getObjectFileInfo:>removing-dangling-object-getofileinfo>", reducedErr, bucket, object, opts)
 					er.deleteObjectVersion(ctx, bucket, object, 1, FileInfo{
 						Name:      object,
 						VersionID: opts.VersionID,
@@ -1209,13 +1208,9 @@ func (er erasureObjects) GetObjectTags(ctx context.Context, bucket, object strin
 
 // TransitionObject - transition object content to target tier.
 func (er erasureObjects) TransitionObject(ctx context.Context, bucket, object string, opts ObjectOptions) error {
-	tgt := globalBucketTargetSys.GetRemoteTargetWithLabel(ctx, bucket, opts.Transition.StorageClass)
-	if tgt == nil {
-		return fmt.Errorf("remote target not configured")
-	}
-	tgtClient := globalBucketTargetSys.GetRemoteTargetClient(ctx, tgt.Arn)
-	if tgtClient == nil {
-		return fmt.Errorf("remote target not configured")
+	tgtClient, err := globalTransitionStorageClassConfigMgr.GetDriver(opts.Transition.StorageClass)
+	if err != nil {
+		return err
 	}
 	// Acquire a write lock before deleting the object.
 	lk := er.NewNSLock(bucket, object)
@@ -1252,7 +1247,8 @@ func (er erasureObjects) TransitionObject(ctx context.Context, bucket, object st
 		pr.Close()
 		return err
 	}
-	if _, err = tgtClient.PutObject(ctx, tgtClient.Bucket, destObj, pr, fi.Size, miniogo.PutObjectOptions{StorageClass: tgt.StorageClass}); err != nil {
+
+	if err = tgtClient.Put(ctx, destObj, pr, fi.Size); err != nil {
 		pr.Close()
 		return err
 	}

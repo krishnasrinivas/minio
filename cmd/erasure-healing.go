@@ -500,7 +500,7 @@ func (er erasureObjects) healObjectDir(ctx context.Context, bucket, object strin
 	errs := statAllDirs(ctx, storageDisks, bucket, object)
 	danglingObject := isObjectDirDangling(errs)
 	if danglingObject {
-		fmt.Println("dangline obj..", errs, object)
+		fmt.Println("healObjectDir:dangling object..", errs, bucket, object)
 		if !dryRun && remove {
 			var wg sync.WaitGroup
 			// Remove versions in bulk for each disk

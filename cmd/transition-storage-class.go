@@ -178,10 +178,10 @@ func loadGlobalTransitionStorageClassConfig() error {
 		if isErrObjectNotFound(err) {
 			globalTransitionStorageClassConfigMgr = &TransitionStorageClassConfigMgr{
 				RWMutex:     sync.RWMutex{},
-				drivercache: map[string]warmBackend{},
-				S3:          map[string]madmin.TransitionStorageClassS3{},
-				Azure:       map[string]madmin.TransitionStorageClassAzure{},
-				GCS:         map[string]madmin.TransitionStorageClassGCS{},
+				drivercache: make(map[string]warmBackend),
+				S3:          make(map[string]madmin.TransitionStorageClassS3),
+				Azure:       make(map[string]madmin.TransitionStorageClassAzure),
+				GCS:         make(map[string]madmin.TransitionStorageClassGCS),
 			}
 		}
 		return err
@@ -191,15 +191,17 @@ func loadGlobalTransitionStorageClassConfig() error {
 	if err != nil {
 		return err
 	}
-
+	if config.drivercache == nil {
+		config.drivercache = make(map[string]warmBackend)
+	}
 	if config.S3 == nil {
-		config.S3 = map[string]madmin.TransitionStorageClassS3{}
+		config.S3 = make(map[string]madmin.TransitionStorageClassS3)
 	}
 	if config.Azure == nil {
-		config.Azure = map[string]madmin.TransitionStorageClassAzure{}
+		config.Azure = make(map[string]madmin.TransitionStorageClassAzure)
 	}
 	if config.GCS == nil {
-		config.GCS = map[string]madmin.TransitionStorageClassGCS{}
+		config.GCS = make(map[string]madmin.TransitionStorageClassGCS)
 	}
 
 	globalTransitionStorageClassConfigMgr = &config

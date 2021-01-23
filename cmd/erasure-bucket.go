@@ -141,7 +141,7 @@ func (er erasureObjects) GetBucketInfo(ctx context.Context, bucket string) (bi B
 // is no way a user can create buckets and sneak in objects into namespace,
 // so it is safer to do.
 func deleteDanglingBucket(ctx context.Context, storageDisks []StorageAPI, dErrs []error, bucket string) {
-	fmt.Println("delete dangling bucket>",dErrs, bucket)
+	fmt.Println("deleteDanglingBucket:>", dErrs, bucket)
 	for index, err := range dErrs {
 		if err == errVolumeNotEmpty {
 			// Attempt to delete bucket again.

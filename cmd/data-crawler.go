@@ -554,7 +554,7 @@ func (f *folderScanner) scanQueuedLevels(ctx context.Context, folders []cachedFo
 
 					// agreed value less than expected quorum
 					dangling = nAgreed < resolver.objQuorum || nAgreed < resolver.dirQuorum
-					fmt.Println("dangling because nagredd=", nAgreed, "quorum", resolver.objQuorum, "DIRQ", resolver.dirQuorum)
+					fmt.Println("scanQueuedLevels:dangling because nagredd=", nAgreed, "quorum", resolver.objQuorum, "DIRQ", resolver.dirQuorum, bucket, prefix)
 					// Sleep and reset.
 					wait()
 					wait = crawlerSleeper.Timer(ctx)
@@ -621,7 +621,7 @@ func (f *folderScanner) scanQueuedLevels(ctx context.Context, folders []cachedFo
 
 			// If we found one or more disks with this folder, delete it.
 			if err == nil && dangling {
-				fmt.Println("#deleting dangling dir>", prefix)
+				fmt.Println("scanQueuedLevels:#deleting dangling dir>", prefix, bucket)
 				if f.dataUsageCrawlDebug {
 					console.Debugf(healObjectsPrefix+" deleting dangling directory %s\n", prefix)
 				}

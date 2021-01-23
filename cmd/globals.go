@@ -159,7 +159,6 @@ var (
 	globalLifecycleSys       *LifecycleSys
 	globalBucketSSEConfigSys *BucketSSEConfigSys
 	globalBucketTargetSys    *BucketTargetSys
-	globalStorageClassSys    *SCTargetSys
 	// globalAPIConfig controls S3 API requests throttling,
 	// healthcheck readiness deadlines and cors settings.
 	globalAPIConfig = apiConfig{listQuorum: 3}
