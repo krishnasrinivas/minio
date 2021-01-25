@@ -7,6 +7,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/minio/minio/pkg/madmin"
+	"google.golang.org/api/googleapi"
 )
 
 type warmBackendGCS struct {
@@ -31,7 +32,7 @@ func (gcs *warmBackendGCS) Put(ctx context.Context, key string, data io.Reader, 
 		w.ObjectAttrs.StorageClass = gcs.StorageClass
 	}
 	if _, err := io.Copy(w, data); err != nil {
-		return err
+		return gcsToObjectError(err, gcs.Bucket, key)
 	}
 
 	return w.Close()
@@ -47,16 +48,111 @@ func (gcs *warmBackendGCS) Get(ctx context.Context, key string, opts warmBackend
 
 	r, err = object.NewRangeReader(ctx, opts.startOffset, opts.length)
 	if err != nil {
-		return nil, err
+		return nil, gcsToObjectError(err, gcs.Bucket, key)
+
 	}
 	return r, nil
 }
 
-func (gcs *warmBackendGCS) Remove(ctx context.Context, object string) error {
-	return gcs.client.Bucket(gcs.Bucket).Object(object).Delete(ctx)
+func (gcs *warmBackendGCS) Remove(ctx context.Context, key string) error {
+	err := gcs.client.Bucket(gcs.Bucket).Object(key).Delete(ctx)
+	return gcsToObjectError(err, gcs.Bucket, key)
 }
 
 func newWarmBackendGCS(conf madmin.TransitionStorageClassGCS) (*warmBackendGCS, error) {
 	// TODO: trim slash on prefix
 	return nil, nil
+}
+
+// Convert GCS errors to minio object layer errors.
+func gcsToObjectError(err error, params ...string) error {
+	if err == nil {
+		return nil
+	}
+
+	bucket := ""
+	object := ""
+	uploadID := ""
+	if len(params) >= 1 {
+		bucket = params[0]
+	}
+	if len(params) == 2 {
+		object = params[1]
+	}
+	if len(params) == 3 {
+		uploadID = params[2]
+	}
+
+	// in some cases just a plain error is being returned
+	switch err.Error() {
+	case "storage: bucket doesn't exist":
+		err = BucketNotFound{
+			Bucket: bucket,
+		}
+		return err
+	case "storage: object doesn't exist":
+		if uploadID != "" {
+			err = InvalidUploadID{
+				UploadID: uploadID,
+			}
+		} else {
+			err = ObjectNotFound{
+				Bucket: bucket,
+				Object: object,
+			}
+		}
+		return err
+	}
+
+	googleAPIErr, ok := err.(*googleapi.Error)
+	if !ok {
+		// We don't interpret non MinIO errors. As minio errors will
+		// have StatusCode to help to convert to object errors.
+		return err
+	}
+
+	if len(googleAPIErr.Errors) == 0 {
+		return err
+	}
+
+	reason := googleAPIErr.Errors[0].Reason
+	message := googleAPIErr.Errors[0].Message
+
+	switch reason {
+	case "required":
+		// Anonymous users does not have storage.xyz access to project 123.
+		fallthrough
+	case "keyInvalid":
+		fallthrough
+	case "forbidden":
+		err = PrefixAccessDenied{
+			Bucket: bucket,
+			Object: object,
+		}
+	case "invalid":
+		err = BucketNameInvalid{
+			Bucket: bucket,
+		}
+	case "notFound":
+		if object != "" {
+			err = ObjectNotFound{
+				Bucket: bucket,
+				Object: object,
+			}
+			break
+		}
+		err = BucketNotFound{Bucket: bucket}
+	case "conflict":
+		if message == "You already own this bucket. Please select another name." {
+			err = BucketAlreadyOwnedByYou{Bucket: bucket}
+			break
+		}
+		if message == "Sorry, that name is not available. Please try a different one." {
+			err = BucketAlreadyExists{Bucket: bucket}
+			break
+		}
+		err = BucketNotEmpty{Bucket: bucket}
+	}
+
+	return err
 }

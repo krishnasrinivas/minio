@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"strings"
 
@@ -40,11 +41,11 @@ func (az *warmBackendAzure) Put(ctx context.Context, object string, r io.Reader,
 	// set tier if specified -
 	if az.StorageClass != "" {
 		if _, err := blobURL.SetTier(ctx, az.tier(), azblob.LeaseAccessConditions{}); err != nil {
-			return err
+			return azureToObjectError(err, az.Bucket, object)
 		}
 	}
 	_, err := azblob.UploadStreamToBlockBlob(ctx, r, blobURL, azblob.UploadStreamToBlockBlobOptions{})
-	return err
+	return azureToObjectError(err, az.Bucket, object)
 }
 
 func (az *warmBackendAzure) Get(ctx context.Context, object string, opts warmBackendGetOpts) (r io.ReadCloser, err error) {
@@ -54,7 +55,7 @@ func (az *warmBackendAzure) Get(ctx context.Context, object string, opts warmBac
 	blobURL := az.serviceURL.NewContainerURL(az.Bucket).NewBlobURL(az.getDest(object))
 	blob, err := blobURL.Download(ctx, opts.startOffset, opts.length, azblob.BlobAccessConditions{}, false)
 	if err != nil {
-		return nil, err
+		return nil, azureToObjectError(err, az.Bucket, object)
 	}
 
 	rc := blob.Body(azblob.RetryReaderOptions{})
@@ -64,7 +65,7 @@ func (az *warmBackendAzure) Get(ctx context.Context, object string, opts warmBac
 func (az *warmBackendAzure) Remove(ctx context.Context, object string) error {
 	blob := az.serviceURL.NewContainerURL(az.Bucket).NewBlobURL(az.getDest(object))
 	_, err := blob.Delete(ctx, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
-	return err
+	return azureToObjectError(err, az.Bucket, object)
 }
 
 func newWarmBackendAzure(conf madmin.TransitionStorageClassAzure) (*warmBackendAzure, error) {
@@ -81,7 +82,72 @@ func newWarmBackendAzure(conf madmin.TransitionStorageClassAzure) (*warmBackendA
 	return &warmBackendAzure{
 		serviceURL:   serviceURL,
 		Bucket:       conf.Bucket,
-		Prefix:       conf.Prefix,
+		Prefix:       strings.TrimSuffix(conf.Prefix, slashSeparator),
 		StorageClass: conf.StorageClass,
 	}, nil
+}
+
+// Convert azure errors to minio object layer errors.
+func azureToObjectError(err error, params ...string) error {
+	if err == nil {
+		return nil
+	}
+
+	bucket := ""
+	object := ""
+	if len(params) >= 1 {
+		bucket = params[0]
+	}
+	if len(params) == 2 {
+		object = params[1]
+	}
+
+	azureErr, ok := err.(azblob.StorageError)
+	if !ok {
+		// We don't interpret non Azure errors. As azure errors will
+		// have StatusCode to help to convert to object errors.
+		return err
+	}
+
+	serviceCode := string(azureErr.ServiceCode())
+	statusCode := azureErr.Response().StatusCode
+
+	return azureCodesToObjectError(err, serviceCode, statusCode, bucket, object)
+}
+
+func azureCodesToObjectError(err error, serviceCode string, statusCode int, bucket string, object string) error {
+	switch serviceCode {
+	case "ContainerNotFound", "ContainerBeingDeleted":
+		err = BucketNotFound{Bucket: bucket}
+	case "ContainerAlreadyExists":
+		err = BucketExists{Bucket: bucket}
+	case "InvalidResourceName":
+		err = BucketNameInvalid{Bucket: bucket}
+	case "RequestBodyTooLarge":
+		err = PartTooBig{}
+	case "InvalidMetadata":
+		err = UnsupportedMetadata{}
+	case "BlobAccessTierNotSupportedForAccountType":
+		err = NotImplemented{}
+	case "OutOfRangeInput":
+		err = ObjectNameInvalid{
+			Bucket: bucket,
+			Object: object,
+		}
+	default:
+		switch statusCode {
+		case http.StatusNotFound:
+			if object != "" {
+				err = ObjectNotFound{
+					Bucket: bucket,
+					Object: object,
+				}
+			} else {
+				err = BucketNotFound{Bucket: bucket}
+			}
+		case http.StatusBadRequest:
+			err = BucketNameInvalid{Bucket: bucket}
+		}
+	}
+	return err
 }
