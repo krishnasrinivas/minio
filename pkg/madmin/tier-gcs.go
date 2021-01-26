@@ -46,6 +46,7 @@ func GCSRegion(region string) func(*TierGCS) error {
 		return nil
 	}
 }
+
 func GCSStorageClass(sc string) func(*TierGCS) error {
 	return func(gcs *TierGCS) error {
 		gcs.StorageClass = sc

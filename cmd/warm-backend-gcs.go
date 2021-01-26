@@ -7,7 +7,9 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/minio/minio/pkg/madmin"
+	"golang.org/x/oauth2/google"
 	"google.golang.org/api/googleapi"
+	"google.golang.org/api/option"
 )
 
 type warmBackendGCS struct {
@@ -60,8 +62,22 @@ func (gcs *warmBackendGCS) Remove(ctx context.Context, key string) error {
 }
 
 func newWarmBackendGCS(conf madmin.TierGCS) (*warmBackendGCS, error) {
-	// TODO: trim slash on prefix
-	return nil, nil
+	credsJSON, err := conf.GetCredentialJSON()
+	if err != nil {
+		return nil, err
+	}
+
+	creds, err := google.CredentialsFromJSON(context.Background(), []byte(credsJSON))
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := storage.NewClient(context.Background(), option.WithCredentials(creds))
+	if err != nil {
+		return nil, err
+	}
+
+	return &warmBackendGCS{client, conf.Bucket, conf.Prefix, conf.StorageClass}, nil
 }
 
 // Convert GCS errors to minio object layer errors.

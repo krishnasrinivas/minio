@@ -85,6 +85,7 @@ require (
 	go.etcd.io/etcd v0.0.0-20201125193152-8a03d2e9614b
 	golang.org/x/crypto v0.0.0-20201124201722-c8d3bf9c5392
 	golang.org/x/net v0.0.0-20201216054612-986b41b23924
+	golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421
 	golang.org/x/sys v0.0.0-20201119102817-f84b799fce68
 	golang.org/x/tools v0.0.0-20200929223013-bf155c11ec6f // indirect
 	google.golang.org/api v0.5.0
