@@ -50,6 +50,12 @@ func (api adminAPIHandlers) AddTierHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Refresh from the disk in case we had missed notifications about edits from peers.
+	if err := loadGlobalTransitionStorageClassConfig(); err != nil {
+		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
+		return
+	}
+
 	err = globalTierConfigMgr.Add(cfg)
 	if err != nil {
 		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
@@ -79,6 +85,12 @@ func (api adminAPIHandlers) RemoveTierHandler(w http.ResponseWriter, r *http.Req
 
 	var vars = mux.Vars(r)
 	scName := vars["tier"]
+
+	// Refresh from the disk in case we had missed notifications about edits from peers.
+	if err := loadGlobalTransitionStorageClassConfig(); err != nil {
+		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
+		return
+	}
 
 	globalTierConfigMgr.RemoveTier(scName)
 	err := saveGlobalTierConfig()
@@ -134,6 +146,12 @@ func (api adminAPIHandlers) EditTierHandler(w http.ResponseWriter, r *http.Reque
 
 	var creds madmin.TierCreds
 	if err := json.Unmarshal(reqBytes, &creds); err != nil {
+		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
+		return
+	}
+
+	// Refresh from the disk in case we had missed notifications about edits from peers.
+	if err := loadGlobalTransitionStorageClassConfig(); err != nil {
 		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
 		return
 	}
