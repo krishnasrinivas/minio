@@ -24,6 +24,11 @@ var (
 		Message:    "Specified remote tier was not found",
 		StatusCode: http.StatusNotFound,
 	}
+	errTierInUse = AdminError{
+		Code:       "XMinioAdminTierInUse",
+		Message:    "Specified remote tier is in active use by one or more ILM rules",
+		StatusCode: http.StatusConflict,
+	}
 )
 
 func (api adminAPIHandlers) AddTierHandler(w http.ResponseWriter, r *http.Request) {
@@ -56,7 +61,7 @@ func (api adminAPIHandlers) AddTierHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	err = globalTierConfigMgr.Add(cfg)
+	err = globalTierConfigMgr.AddTier(cfg)
 	if err != nil {
 		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
 		return
@@ -84,7 +89,7 @@ func (api adminAPIHandlers) RemoveTierHandler(w http.ResponseWriter, r *http.Req
 	}
 
 	var vars = mux.Vars(r)
-	scName := vars["tier"]
+	tierName := vars["tier"]
 
 	// Refresh from the disk in case we had missed notifications about edits from peers.
 	if err := loadGlobalTransitionTierConfig(); err != nil {
@@ -92,9 +97,12 @@ func (api adminAPIHandlers) RemoveTierHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	globalTierConfigMgr.RemoveTier(scName)
-	err := saveGlobalTierConfig()
-	if err != nil {
+	if err := globalTierConfigMgr.RemoveTier(tierName); err != nil {
+		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
+		return
+	}
+
+	if err := saveGlobalTierConfig(); err != nil {
 		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
 		return
 	}
@@ -135,7 +143,7 @@ func (api adminAPIHandlers) EditTierHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	vars := mux.Vars(r)
-	scName := vars["tier"]
+	tierName := vars["tier"]
 
 	password := cred.SecretKey
 	reqBytes, err := madmin.DecryptData(password, io.LimitReader(r.Body, r.ContentLength))
@@ -156,7 +164,7 @@ func (api adminAPIHandlers) EditTierHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := globalTierConfigMgr.Edit(scName, creds); err != nil {
+	if err := globalTierConfigMgr.EditTier(tierName, creds); err != nil {
 		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
 		return
 	}

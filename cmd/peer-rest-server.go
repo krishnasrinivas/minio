@@ -961,6 +961,7 @@ func (s *peerRESTServer) LoadTransitionTierConfigHandler(w http.ResponseWriter, 
 		s.writeErrorResponse(w, errors.New("invalid request"))
 		return
 	}
+
 	loadGlobalTransitionTierConfig()
 }
 

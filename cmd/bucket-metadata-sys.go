@@ -420,6 +420,35 @@ func (sys *BucketMetadataSys) GetConfig(bucket string) (BucketMetadata, error) {
 	return meta, nil
 }
 
+// IsTierInUse returns true if there exists at least one active ILM rules
+// refering to tierName. Otherwise it returns false.
+//
+// N B this check is potentially racy, i.e a concurrent
+// PutBucketLifecycle/DeleteBucketLifecycle API request could change this
+// shortly after the check. Since, this check is only a best effort attempt to
+// prevent a user from deleting a remote tier that is in active use, this race
+// is acceptable.
+func (sys *BucketMetadataSys) IsTierInUse(tierName string) bool {
+	sys.RLock()
+	defer sys.RUnlock()
+	for _, bucketMeta := range sys.metadataMap {
+		// skip buckets with no lifecycle rules configured
+		if bucketMeta.lifecycleConfig == nil {
+			continue
+		}
+		for _, rule := range bucketMeta.lifecycleConfig.Rules {
+			// skip disabled rules
+			if rule.Status == lifecycle.Disabled {
+				continue
+			}
+			if rule.Transition.StorageClass == tierName {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // Init - initializes bucket metadata system for all buckets.
 func (sys *BucketMetadataSys) Init(ctx context.Context, buckets []BucketInfo, objAPI ObjectLayer) error {
 	if objAPI == nil {
