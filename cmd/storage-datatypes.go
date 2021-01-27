@@ -123,8 +123,8 @@ type FileInfo struct {
 	// TransitionedObjName is the object name on the remote tier corresponding
 	// to object (version) on the source tier.
 	TransitionedObjName string
-	// TransitionStorageClass is the storage class label assigned to remote tier.
-	TransitionStorageClass string
+	// TransitionTier is the storage class label assigned to remote tier.
+	TransitionTier string
 
 	// DataDir of the file
 	DataDir string

@@ -782,7 +782,7 @@ next:
 					VersionID:    goi.VersionID,
 					DeleteMarker: goi.DeleteMarker,
 					IsLatest:     goi.IsLatest,
-				}, action, goi.transitionedObjName, goi.TransitionStorageClass, false)
+				}, action, goi.transitionedObjName, goi.TransitionTier, false)
 			}
 
 			logger.LogIf(ctx, err)

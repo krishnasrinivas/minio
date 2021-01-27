@@ -224,7 +224,7 @@ func saveGlobalTierConfig() error {
 	return err
 }
 
-func loadGlobalTransitionStorageClassConfig() error {
+func loadGlobalTransitionTierConfig() error {
 	var buf bytes.Buffer
 	err := globalObjectAPI.GetObject(context.Background(), minioMetaBucket, TierConfigPath, 0, -1, &buf, "", ObjectOptions{})
 	if err != nil {

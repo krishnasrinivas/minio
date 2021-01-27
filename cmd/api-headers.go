@@ -197,7 +197,7 @@ func setObjectHeaders(w http.ResponseWriter, objInfo ObjectInfo, rs *HTTPRangeSp
 		if objInfo.TransitionStatus == lifecycle.TransitionComplete {
 			restoreHdr, ok := objInfo.UserDefined[xhttp.AmzRestore]
 			if !ok || !strings.HasPrefix(restoreHdr, "ongoing-request=false") || (!objInfo.RestoreExpires.IsZero() && time.Now().After(objInfo.RestoreExpires)) {
-				w.Header()[xhttp.AmzStorageClass] = []string{objInfo.TransitionStorageClass}
+				w.Header()[xhttp.AmzStorageClass] = []string{objInfo.TransitionTier}
 			}
 		}
 		ruleID, transitionTime := lc.PredictTransitionTime(lifecycle.ObjectOpts{

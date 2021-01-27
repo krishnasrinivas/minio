@@ -691,7 +691,7 @@ func (sys *NotificationSys) DeleteBucketMetadata(ctx context.Context, bucketName
 	}
 }
 
-func (sys *NotificationSys) LoadTransitionStorageClassConfig(ctx context.Context) {
+func (sys *NotificationSys) LoadTransitionTierConfig(ctx context.Context) {
 	ng := WithNPeers(len(sys.peerClients))
 	for idx, client := range sys.peerClients {
 		if client == nil {
@@ -699,7 +699,7 @@ func (sys *NotificationSys) LoadTransitionStorageClassConfig(ctx context.Context
 		}
 		client := client
 		ng.Go(ctx, func() error {
-			return client.LoadTransitionStorageClassConfig(ctx)
+			return client.LoadTransitionTierConfig(ctx)
 		}, idx, *client.host)
 	}
 	for _, nErr := range ng.Wait() {

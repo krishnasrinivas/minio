@@ -145,7 +145,7 @@ func (fi FileInfo) ToObjectInfo(bucket, object string) ObjectInfo {
 
 	objInfo.TransitionStatus = fi.TransitionStatus
 	objInfo.transitionedObjName = fi.TransitionedObjName
-	objInfo.TransitionStorageClass = fi.TransitionStorageClass
+	objInfo.TransitionTier = fi.TransitionTier
 
 	// etag/md5Sum has already been extracted. We need to
 	// remove to avoid it from appearing as part of

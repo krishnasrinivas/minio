@@ -43,8 +43,8 @@ const (
 	TransitionStatus = "transition-status"
 	// TransitionedObjectName name of transitioned object
 	TransitionedObjectName = "transitioned-object"
-	// TransitionStorageClass name of transition storage class
-	TransitionStorageClass = "transition-sc"
+	// TransitionTier name of transition storage class
+	TransitionTier = "transition-tier"
 )
 
 // LifecycleSys - Bucket lifecycle subsystem.
@@ -178,8 +178,8 @@ func deleteTransitionedObject(ctx context.Context, objectAPI ObjectLayer, bucket
 		return err
 	}
 
-	sc := getLifeCycleTransitionStorageClass(ctx, lc, bucket, lcOpts)
-	tgtClient, err := globalTierConfigMgr.GetDriver(sc)
+	tierName := getLifeCycleTransitionTier(ctx, lc, bucket, lcOpts)
+	tgtClient, err := globalTierConfigMgr.GetDriver(tierName)
 	if err != nil {
 		return err
 	}
@@ -256,11 +256,11 @@ func transitionObject(ctx context.Context, objectAPI ObjectLayer, oi ObjectInfo)
 		Name:     oi.Name,
 		UserTags: oi.UserTags,
 	}
-	sc := getLifeCycleTransitionStorageClass(ctx, lc, oi.Bucket, lcOpts)
+	tierName := getLifeCycleTransitionTier(ctx, lc, oi.Bucket, lcOpts)
 	opts := ObjectOptions{Transition: TransitionOptions{
-		Status:       lifecycle.TransitionPending,
-		StorageClass: sc,
-		ETag:         oi.ETag,
+		Status: lifecycle.TransitionPending,
+		Tier:   tierName,
+		ETag:   oi.ETag,
 	},
 		VersionID: oi.VersionID,
 		Versioned: globalBucketVersioningSys.Enabled(oi.Bucket),
@@ -269,8 +269,8 @@ func transitionObject(ctx context.Context, objectAPI ObjectLayer, oi ObjectInfo)
 	return objectAPI.TransitionObject(ctx, oi.Bucket, oi.Name, opts)
 }
 
-// getLifeCycleTransitionStorageClass returns storage class for transition target
-func getLifeCycleTransitionStorageClass(ctx context.Context, lc *lifecycle.Lifecycle, bucket string, obj lifecycle.ObjectOpts) string {
+// getLifeCycleTransitionTier returns storage class for transition target
+func getLifeCycleTransitionTier(ctx context.Context, lc *lifecycle.Lifecycle, bucket string, obj lifecycle.ObjectOpts) string {
 	for _, rule := range lc.FilterActionableRules(obj) {
 		if rule.Transition.StorageClass != "" {
 			return rule.Transition.StorageClass
@@ -281,7 +281,7 @@ func getLifeCycleTransitionStorageClass(ctx context.Context, lc *lifecycle.Lifec
 
 // getTransitionedObjectReader returns a reader from the transitioned tier.
 func getTransitionedObjectReader(ctx context.Context, bucket, object string, rs *HTTPRangeSpec, h http.Header, oi ObjectInfo, opts ObjectOptions) (gr *GetObjectReader, err error) {
-	tgtClient, err := globalTierConfigMgr.GetDriver(oi.TransitionStorageClass)
+	tgtClient, err := globalTierConfigMgr.GetDriver(oi.TransitionTier)
 	if err != nil {
 		return nil, fmt.Errorf("transition storage class not configured")
 	}

@@ -2845,7 +2845,7 @@ func (api objectAPIHandlers) DeleteObjectHandler(w http.ResponseWriter, r *http.
 				DeleteMarker:     goi.DeleteMarker,
 				TransitionStatus: goi.TransitionStatus,
 				IsLatest:         goi.IsLatest,
-			}, action, goi.transitionedObjName, goi.TransitionStorageClass, false)
+			}, action, goi.transitionedObjName, goi.TransitionTier, false)
 		}
 	}
 

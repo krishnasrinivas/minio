@@ -432,8 +432,8 @@ func (j xlMetaV2Object) ToFileInfo(volume, path string) (FileInfo, error) {
 	if o, ok := j.MetaSys[ReservedMetadataPrefixLower+TransitionedObjectName]; ok {
 		fi.TransitionedObjName = string(o)
 	}
-	if sc, ok := j.MetaSys[ReservedMetadataPrefixLower+TransitionStorageClass]; ok {
-		fi.TransitionStorageClass = string(sc)
+	if sc, ok := j.MetaSys[ReservedMetadataPrefixLower+TransitionTier]; ok {
+		fi.TransitionTier = string(sc)
 	}
 	return fi, nil
 }
@@ -507,7 +507,7 @@ func (z *xlMetaV2) DeleteVersion(fi FileInfo) (string, bool, error) {
 				if fi.TransitionStatus != "" {
 					z.Versions[i].ObjectV1.Meta[ReservedMetadataPrefixLower+TransitionStatus] = fi.TransitionStatus
 					z.Versions[i].ObjectV1.Meta[ReservedMetadataPrefixLower+TransitionedObjectName] = fi.TransitionedObjName
-					z.Versions[i].ObjectV1.Meta[ReservedMetadataPrefixLower+TransitionStorageClass] = fi.TransitionStorageClass
+					z.Versions[i].ObjectV1.Meta[ReservedMetadataPrefixLower+TransitionTier] = fi.TransitionTier
 					return uuid.UUID(version.ObjectV2.DataDir).String(), len(z.Versions) == 0, nil
 				}
 
@@ -570,7 +570,7 @@ func (z *xlMetaV2) DeleteVersion(fi FileInfo) (string, bool, error) {
 				if fi.TransitionStatus != "" {
 					z.Versions[i].ObjectV2.MetaSys[ReservedMetadataPrefixLower+TransitionStatus] = []byte(fi.TransitionStatus)
 					z.Versions[i].ObjectV2.MetaSys[ReservedMetadataPrefixLower+TransitionedObjectName] = []byte(fi.TransitionedObjName)
-					z.Versions[i].ObjectV2.MetaSys[ReservedMetadataPrefixLower+TransitionStorageClass] = []byte(fi.TransitionStorageClass)
+					z.Versions[i].ObjectV2.MetaSys[ReservedMetadataPrefixLower+TransitionTier] = []byte(fi.TransitionTier)
 					return uuid.UUID(version.ObjectV2.DataDir).String(), len(z.Versions) == 0, nil
 				}
 				z.Versions = append(z.Versions[:i], z.Versions[i+1:]...)

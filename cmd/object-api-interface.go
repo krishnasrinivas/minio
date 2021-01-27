@@ -57,7 +57,7 @@ type ObjectOptions struct {
 // TransitionOptions represents object options for transition ObjectLayer operation
 type TransitionOptions struct {
 	Status         string
-	StorageClass   string
+	Tier           string
 	ETag           string
 	RestoreRequest *RestoreObjectRequest
 	RestoreExpiry  time.Time

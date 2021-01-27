@@ -418,10 +418,6 @@ func (er erasureObjects) getObjectInfo(ctx context.Context, bucket, object strin
 		return objInfo, toObjectErr(err, bucket, object)
 	}
 	objInfo = fi.ToObjectInfo(bucket, object)
-	// if objInfo.TransitionStatus == lifecycle.TransitionComplete {
-	// 	// overlay storage class for transitioned objects with transition tier SC Label
-	// 	objInfo.StorageClass = objInfo.TransitionStorageClass
-	// }
 	if !fi.VersionPurgeStatus.Empty() {
 		// Make sure to return object info to provide extra information.
 		return objInfo, toObjectErr(errMethodNotAllowed, bucket, object)
@@ -1208,7 +1204,7 @@ func (er erasureObjects) GetObjectTags(ctx context.Context, bucket, object strin
 
 // TransitionObject - transition object content to target tier.
 func (er erasureObjects) TransitionObject(ctx context.Context, bucket, object string, opts ObjectOptions) error {
-	tgtClient, err := globalTierConfigMgr.GetDriver(opts.Transition.StorageClass)
+	tgtClient, err := globalTierConfigMgr.GetDriver(opts.Transition.Tier)
 	if err != nil {
 		return err
 	}
@@ -1258,7 +1254,7 @@ func (er erasureObjects) TransitionObject(ctx context.Context, bucket, object st
 	pr.Close()
 	fi.TransitionStatus = lifecycle.TransitionComplete
 	fi.TransitionedObjName = destObj
-	fi.TransitionStorageClass = opts.Transition.StorageClass
+	fi.TransitionTier = opts.Transition.Tier
 	eventName := event.ObjectTransitionComplete
 
 	storageDisks := er.getDisks()

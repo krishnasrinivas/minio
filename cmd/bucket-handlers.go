@@ -454,7 +454,7 @@ func (api objectAPIHandlers) DeleteMultipleObjectsHandler(w http.ResponseWriter,
 		if hasLifecycleConfig && gerr == nil {
 			object.PurgeTransitioned = goi.TransitionStatus
 			object.TransitionedObjName = goi.transitionedObjName
-			object.TransitionSC = goi.TransitionStorageClass
+			object.TransitionSC = goi.TransitionTier
 		}
 		if replicateDeletes {
 			delMarker, replicate := checkReplicateDelete(ctx, bucket, ObjectToDelete{

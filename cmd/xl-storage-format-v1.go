@@ -206,7 +206,7 @@ func (m *xlMetaV1Object) ToFileInfo(volume, path string) (FileInfo, error) {
 	if transitionStatus != "" {
 		fi.TransitionStatus = transitionStatus
 		fi.TransitionedObjName = transitionedObj
-		fi.TransitionStorageClass = m.Meta[ReservedMetadataPrefixLower+TransitionStorageClass]
+		fi.TransitionTier = m.Meta[ReservedMetadataPrefixLower+TransitionTier]
 	}
 	return fi, nil
 }

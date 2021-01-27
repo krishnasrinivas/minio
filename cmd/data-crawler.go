@@ -946,7 +946,7 @@ func (i *crawlItem) applyActions(ctx context.Context, o ObjectLayer, meta action
 		return 0
 	}
 	if obj.TransitionStatus != "" {
-		if err := deleteTransitionedObject(ctx, o, i.bucket, i.objectPath(), lcOpts, action, obj.transitionedObjName, obj.TransitionStorageClass, true); err != nil {
+		if err := deleteTransitionedObject(ctx, o, i.bucket, i.objectPath(), lcOpts, action, obj.transitionedObjName, obj.TransitionTier, true); err != nil {
 			logger.LogIf(ctx, err)
 			return size
 		}

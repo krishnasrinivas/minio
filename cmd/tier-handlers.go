@@ -51,7 +51,7 @@ func (api adminAPIHandlers) AddTierHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Refresh from the disk in case we had missed notifications about edits from peers.
-	if err := loadGlobalTransitionStorageClassConfig(); err != nil {
+	if err := loadGlobalTransitionTierConfig(); err != nil {
 		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
 		return
 	}
@@ -67,7 +67,7 @@ func (api adminAPIHandlers) AddTierHandler(w http.ResponseWriter, r *http.Reques
 		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
 		return
 	}
-	globalNotificationSys.LoadTransitionStorageClassConfig(ctx)
+	globalNotificationSys.LoadTransitionTierConfig(ctx)
 
 	writeSuccessNoContent(w)
 }
@@ -87,7 +87,7 @@ func (api adminAPIHandlers) RemoveTierHandler(w http.ResponseWriter, r *http.Req
 	scName := vars["tier"]
 
 	// Refresh from the disk in case we had missed notifications about edits from peers.
-	if err := loadGlobalTransitionStorageClassConfig(); err != nil {
+	if err := loadGlobalTransitionTierConfig(); err != nil {
 		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
 		return
 	}
@@ -98,7 +98,7 @@ func (api adminAPIHandlers) RemoveTierHandler(w http.ResponseWriter, r *http.Req
 		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
 		return
 	}
-	globalNotificationSys.LoadTransitionStorageClassConfig(ctx)
+	globalNotificationSys.LoadTransitionTierConfig(ctx)
 
 	writeSuccessNoContent(w)
 }
@@ -151,7 +151,7 @@ func (api adminAPIHandlers) EditTierHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Refresh from the disk in case we had missed notifications about edits from peers.
-	if err := loadGlobalTransitionStorageClassConfig(); err != nil {
+	if err := loadGlobalTransitionTierConfig(); err != nil {
 		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
 		return
 	}
@@ -165,7 +165,7 @@ func (api adminAPIHandlers) EditTierHandler(w http.ResponseWriter, r *http.Reque
 		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
 		return
 	}
-	globalNotificationSys.LoadTransitionStorageClassConfig(ctx)
+	globalNotificationSys.LoadTransitionTierConfig(ctx)
 
 	writeSuccessNoContent(w)
 }
