@@ -47,6 +47,7 @@ func (p *parallelWriter) Write(ctx context.Context, blocks [][]byte) error {
 			defer wg.Done()
 			_, p.errs[i] = p.writers[i].Write(blocks[i])
 			if p.errs[i] != nil {
+				logger.LogIf(ctx, p.errs[i])
 				p.writers[i] = nil
 			}
 		}(i)

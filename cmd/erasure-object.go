@@ -667,6 +667,7 @@ func (er erasureObjects) putObject(ctx context.Context, bucket string, object st
 	// -- FIXME. (needs a new kind of lock).
 	// -- FIXME (this also causes performance issue when disks are down).
 	if opts.ParentIsObject != nil && opts.ParentIsObject(ctx, bucket, path.Dir(object)) {
+		logger.LogIf(ctx, errFileParentIsFile)
 		return ObjectInfo{}, toObjectErr(errFileParentIsFile, bucket, object)
 	}
 
@@ -694,6 +695,7 @@ func (er erasureObjects) putObject(ctx context.Context, bucket string, object st
 
 	erasure, err := NewErasure(ctx, fi.Erasure.DataBlocks, fi.Erasure.ParityBlocks, fi.Erasure.BlockSize)
 	if err != nil {
+		logger.LogIf(ctx, err)
 		return ObjectInfo{}, toObjectErr(err, bucket, object)
 	}
 
@@ -746,12 +748,14 @@ func (er erasureObjects) putObject(ctx context.Context, bucket string, object st
 	n, erasureErr := erasure.Encode(ctx, data, writers, buffer, writeQuorum)
 	closeBitrotWriters(writers)
 	if erasureErr != nil {
+		logger.LogIf(ctx, erasureErr)
 		return ObjectInfo{}, toObjectErr(erasureErr, minioMetaTmpBucket, tempErasureObj)
 	}
 
 	// Should return IncompleteBody{} error when reader has fewer bytes
 	// than specified in request header.
 	if n < data.Size() {
+		logger.LogIf(ctx, IncompleteBody{Bucket: bucket, Object: object})
 		return ObjectInfo{}, IncompleteBody{Bucket: bucket, Object: object}
 	}
 
@@ -760,6 +764,7 @@ func (er erasureObjects) putObject(ctx context.Context, bucket string, object st
 		lk := er.NewNSLock(bucket, object)
 		ctx, err = lk.GetLock(ctx, globalOperationTimeout)
 		if err != nil {
+			logger.LogIf(ctx, err)
 			return ObjectInfo{}, err
 		}
 		defer lk.Unlock()
@@ -801,11 +806,13 @@ func (er erasureObjects) putObject(ctx context.Context, bucket string, object st
 
 	// Write unique `xl.meta` for each disk.
 	if onlineDisks, err = writeUniqueFileInfo(ctx, onlineDisks, minioMetaTmpBucket, tempObj, partsMetadata, writeQuorum); err != nil {
+		logger.LogIf(ctx, err)
 		return ObjectInfo{}, toObjectErr(err, bucket, object)
 	}
 
 	// Rename the successfully written temporary object to final location.
 	if onlineDisks, err = renameData(ctx, onlineDisks, minioMetaTmpBucket, tempObj, fi.DataDir, bucket, object, writeQuorum, nil); err != nil {
+		logger.LogIf(ctx, err)
 		return ObjectInfo{}, toObjectErr(err, bucket, object)
 	}
 
