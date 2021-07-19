@@ -1427,3 +1427,31 @@ func (sys *NotificationSys) GetClusterMetrics(ctx context.Context) chan Metric {
 	}(&wg, ch)
 	return ch
 }
+
+func (sys *NotificationSys) Benchmark(ctx context.Context, bucket string, objectSize int, threads int, durationSecs int) []BenchmarkResult {
+	results := make([]BenchmarkResult, len(sys.peerClients)+1)
+
+	var err error
+	var wg sync.WaitGroup
+	for index := range sys.peerClients {
+		if sys.peerClients[index] == nil {
+			continue
+		}
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			results[index], err = sys.peerClients[index].Benchmark(ctx, bucket, objectSize, threads, durationSecs)
+			fmt.Println(sys.peerClients[index].String(), results[index], err)
+		}(index)
+	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		results[len(results)-1], err = selfBenchmark(bucket, objectSize, threads, durationSecs)
+		fmt.Println("localhost", results[len(results)-1], err)
+	}()
+	wg.Wait()
+
+	return results
+}

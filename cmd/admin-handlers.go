@@ -39,6 +39,7 @@ import (
 	"strings"
 	"time"
 
+	humanize "github.com/dustin/go-humanize"
 	"github.com/gorilla/mux"
 	"github.com/klauspost/compress/zip"
 	"github.com/minio/kes"
@@ -908,6 +909,54 @@ func (a adminAPIHandlers) BackgroundHealStatusHandler(w http.ResponseWriter, r *
 		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
 		return
 	}
+}
+
+func (a adminAPIHandlers) BenchmarkHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := newContext(r, w, "BenchmarkHandler")
+
+	defer logger.AuditLog(ctx, w, r, mustGetClaimsFromToken(r))
+
+	objectAPI, _ := validateAdminReq(ctx, w, r, iampolicy.HealAdminAction)
+	if objectAPI == nil {
+		return
+	}
+
+	if !globalIsDistErasure {
+		writeErrorResponseJSON(ctx, w, errorCodes.ToAPIErr(ErrHealNotImplemented), r.URL)
+		return
+	}
+
+	bucket := r.URL.Query().Get("bucket")
+	sizeStr := r.URL.Query().Get("object-size")
+	threadsStr := r.URL.Query().Get("threads")
+	durationStr := r.URL.Query().Get("duration-seconds")
+
+	if bucket == "" {
+		bucket = "minio-internal-benchmark"
+	}
+
+	sizeInt, err := strconv.Atoi(sizeStr)
+	if err != nil {
+		sizeInt = 64 * humanize.MiByte
+	}
+	threads, err := strconv.Atoi(threadsStr)
+	if err != nil {
+		threads = 32
+	}
+	durationSecs, err := strconv.Atoi(durationStr)
+	if err != nil {
+		durationSecs = 10
+	}
+
+	results := globalNotificationSys.Benchmark(ctx, bucket, sizeInt, threads, durationSecs)
+	fmt.Println("aaa", results)
+
+	if err := json.NewEncoder(w).Encode(results); err != nil {
+		writeErrorResponseJSON(ctx, w, toAdminAPIErr(ctx, err), r.URL)
+		return
+	}
+
+	w.(http.Flusher).Flush()
 }
 
 func validateAdminReq(ctx context.Context, w http.ResponseWriter, r *http.Request, action iampolicy.AdminAction) (ObjectLayer, auth.Credentials) {

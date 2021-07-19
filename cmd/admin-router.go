@@ -204,6 +204,8 @@ func registerAdminRouter(router *mux.Router, enableConfigOps bool) {
 				Queries("paths", "{paths:.*}").HandlerFunc(gz(httpTraceHdrs(adminAPI.ForceUnlockHandler)))
 		}
 
+		adminRouter.Methods(http.MethodPost).Path(adminVersion + "/benchmark").HandlerFunc(httpTraceHdrs(adminAPI.BenchmarkHandler))
+
 		// HTTP Trace
 		adminRouter.Methods(http.MethodGet).Path(adminVersion + "/trace").HandlerFunc(gz(adminAPI.TraceHandler))
 

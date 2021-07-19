@@ -18,7 +18,9 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/gob"
 	"errors"
 	"fmt"
@@ -27,12 +29,17 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
+	humanize "github.com/dustin/go-humanize"
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/minio/madmin-go"
 	b "github.com/minio/minio/internal/bucket/bandwidth"
 	"github.com/minio/minio/internal/event"
+	"github.com/minio/minio/internal/hash"
 	"github.com/minio/minio/internal/logger"
 	"github.com/tinylib/msgp/msgp"
 )
@@ -1097,6 +1104,157 @@ func (s *peerRESTServer) GetPeerMetrics(w http.ResponseWriter, r *http.Request) 
 	w.(http.Flusher).Flush()
 }
 
+type BenchmarkResult struct {
+	Uploads   uint64
+	Downloads uint64
+}
+
+func selfBenchmark(bucket string, size int, threads int, durationSecs int) (result BenchmarkResult, err error) {
+	fmt.Println("selfBenchmark")
+	objAPI := newObjectLayerFn()
+	if objAPI == nil {
+		return result, errServerNotInitialized
+	}
+
+	duration := time.Duration(durationSecs) * time.Second
+
+	buf := make([]byte, size)
+	rand.Read(buf)
+
+	objCountPerThread := make([]uint64, threads)
+
+	var objUploadCount uint64
+	var objDownloadCount uint64
+
+	var wg sync.WaitGroup
+
+	doneCh1 := make(chan struct{})
+	go func() {
+		time.Sleep(duration)
+		close(doneCh1)
+	}()
+
+	objNamePrefix := uuid.New().String()
+
+	ctx := context.Background()
+
+	for i := 0; i < threads; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			for {
+				hashReader, err := hash.NewReader(bytes.NewReader(buf), int64(size), "", "", int64(size))
+				if err != nil {
+					logger.LogIf(ctx, err)
+					break
+				}
+				pReader := NewPutObjReader(hashReader)
+				_, err = objAPI.PutObject(context.Background(), bucket, fmt.Sprintf("%s.%d.%d", objNamePrefix, i, objCountPerThread[i]), pReader, ObjectOptions{})
+				if err != nil {
+					logger.LogIf(ctx, err)
+					break
+				}
+				objCountPerThread[i]++
+				atomic.AddUint64(&objUploadCount, 1)
+				select {
+				case <-doneCh1:
+					return
+				default:
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	doneCh2 := make(chan struct{})
+	go func() {
+		time.Sleep(duration)
+		close(doneCh2)
+	}()
+
+	for i := 0; i < threads; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			var j uint64
+			for {
+				if objCountPerThread[i] == j {
+					j = 0
+				}
+				r, err := objAPI.GetObjectNInfo(context.Background(), bucket, fmt.Sprintf("%s.%d.%d", objNamePrefix, i, j), nil, nil, noLock, ObjectOptions{})
+				if err != nil {
+					logger.LogIf(ctx, err)
+					break
+				}
+				_, err = io.Copy(ioutil.Discard, r)
+				if err != nil {
+					logger.LogIf(ctx, err)
+					break
+				}
+				j++
+				atomic.AddUint64(&objDownloadCount, 1)
+				select {
+				case <-doneCh2:
+					return
+				default:
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+	fmt.Println(objUploadCount, objDownloadCount)
+	fmt.Println(humanize.Bytes(objUploadCount*uint64(size)/10), humanize.Bytes(objDownloadCount*uint64(size)/10))
+	return BenchmarkResult{objUploadCount, objDownloadCount}, nil
+}
+
+func (s *peerRESTServer) BenchmarkHandler(w http.ResponseWriter, r *http.Request) {
+	if !s.IsValid(w, r) {
+		s.writeErrorResponse(w, errors.New("invalid request"))
+	}
+
+	objAPI := newObjectLayerFn()
+	if objAPI == nil {
+		s.writeErrorResponse(w, errServerNotInitialized)
+		return
+	}
+
+	bucket := r.URL.Query().Get("bucket")
+	sizeStr := r.URL.Query().Get("object-size")
+	threadsStr := r.URL.Query().Get("threads")
+	durationStr := r.URL.Query().Get("duration")
+
+	if bucket == "" {
+		bucket = "minio-internal-benchmark"
+	}
+
+	sizeInt, err := strconv.Atoi(sizeStr)
+	if err != nil {
+		sizeInt = 64 * humanize.MiByte
+	}
+	threads, err := strconv.Atoi(threadsStr)
+	if err != nil {
+		threads = 32
+	}
+	durationSecs, err := strconv.Atoi(durationStr)
+	if err != nil {
+		durationSecs = 10
+	}
+
+	size := int64(sizeInt)
+
+	result, err := selfBenchmark(bucket, int(size), threads, durationSecs)
+	if err != nil {
+		s.writeErrorResponse(w, err)
+	}
+
+	enc := gob.NewEncoder(w)
+	if err := enc.Encode(result); err != nil {
+		s.writeErrorResponse(w, errors.New("Encoding report failed: "+err.Error()))
+		return
+	}
+	w.(http.Flusher).Flush()
+}
+
 // registerPeerRESTHandlers - register peer rest router.
 func registerPeerRESTHandlers(router *mux.Router) {
 	server := &peerRESTServer{}
@@ -1139,4 +1297,5 @@ func registerPeerRESTHandlers(router *mux.Router) {
 	subrouter.Methods(http.MethodPost).Path(peerRESTVersionPrefix + peerRESTMethodUpdateMetacacheListing).HandlerFunc(httpTraceHdrs(server.UpdateMetacacheListingHandler))
 	subrouter.Methods(http.MethodPost).Path(peerRESTVersionPrefix + peerRESTMethodGetPeerMetrics).HandlerFunc(httpTraceHdrs(server.GetPeerMetrics))
 	subrouter.Methods(http.MethodPost).Path(peerRESTVersionPrefix + peerRESTMethodLoadTransitionTierConfig).HandlerFunc(httpTraceHdrs(server.LoadTransitionTierConfigHandler))
+	subrouter.Methods(http.MethodPost).Path(peerRESTVersionPrefix + peerRESTMethodBenchmark).HandlerFunc(httpTraceHdrs(server.BenchmarkHandler))
 }

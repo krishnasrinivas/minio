@@ -969,3 +969,22 @@ func (client *peerRESTClient) GetPeerMetrics(ctx context.Context) (<-chan Metric
 	}(ch)
 	return ch, nil
 }
+
+func (client *peerRESTClient) Benchmark(ctx context.Context, bucket string, objectSize int, threads int, durationSecs int) (BenchmarkResult, error) {
+	values := make(url.Values)
+	values.Set(peerRESTBucket, bucket)
+	values.Set(peerRESTObjectSize, strconv.Itoa(objectSize))
+	values.Set(peerRESTThreads, strconv.Itoa(threads))
+	values.Set(peerRESTDurationSeconds, strconv.Itoa(durationSecs))
+
+	respBody, err := client.callWithContext(context.Background(), peerRESTMethodBenchmark, values, nil, -1)
+	if err != nil {
+		return BenchmarkResult{}, err
+	}
+	defer http.DrainBody(respBody)
+
+	dec := gob.NewDecoder(respBody)
+	var result BenchmarkResult
+	err = dec.Decode(&result)
+	return result, err
+}
